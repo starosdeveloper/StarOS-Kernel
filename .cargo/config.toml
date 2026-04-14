@@ -1,0 +1,19 @@
+# Cargo configuration for STAR OS Kernel
+
+[build]
+target = "aarch64-unknown-none"
+
+[target.aarch64-unknown-none]
+rustflags = [
+    "-C", "link-arg=-Tkernel/linker-arm64.ld",
+]
+
+[alias]
+# Alias for running tests on host
+test-host = "test --target x86_64-unknown-linux-gnu"
+
+# Alias for building library
+build-lib = "build --lib"
+
+# Alias for building for target
+build-target = "build --target aarch64-unknown-none"

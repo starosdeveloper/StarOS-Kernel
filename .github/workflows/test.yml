@@ -1,0 +1,156 @@
+# CI/CD Configuration for STAR OS Kernel
+
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-host:
+    name: Host Tests with Sanitizers
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sanitizer: [address, memory, leak]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        components: rust-src
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Run tests with ${{ matrix.sanitizer }} sanitizer
+      run: |
+        cd kernel
+        RUSTFLAGS="-Z sanitizer=${{ matrix.sanitizer }}" \
+        cargo +nightly test --target x86_64-unknown-linux-gnu --lib
+    
+    - name: Run integration tests
+      run: |
+        cd kernel
+        cargo test --tests
+
+  test-target:
+    name: Target Build (aarch64)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        target: aarch64-unknown-none
+    
+    - name: Build for target
+      run: |
+        cd kernel
+        cargo build --target aarch64-unknown-none --lib
+    
+    - name: Check no_std compliance
+      run: |
+        cd kernel
+        cargo check --target aarch64-unknown-none --lib
+
+  fuzzing:
+    name: Fuzzing Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+    
+    - name: Run fuzzing suite (100k iterations)
+      run: |
+        cd kernel
+        cargo test --test dtb_integration fuzz_dtb_parser -- --ignored
+      timeout-minutes: 30
+
+  regression:
+    name: Regression Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+    
+    - name: Run regression suite
+      run: |
+        cd kernel
+        cargo test --test dtb_integration test_dtb_regression_suite
+        cargo test --test bus_integration
+
+  clippy:
+    name: Clippy Lints
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        components: clippy
+    
+    - name: Run clippy
+      run: |
+        cd kernel
+        cargo clippy --all-targets -- -D warnings
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+    
+    - name: Install tarpaulin
+      run: cargo install cargo-tarpaulin
+    
+    - name: Generate coverage
+      run: |
+        cd kernel
+        cargo tarpaulin --out Xml --output-dir coverage
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./kernel/coverage/cobertura.xml
+        fail_ci_if_error: true

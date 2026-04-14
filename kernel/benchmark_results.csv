@@ -1,0 +1,14 @@
+name,iterations,avg_ns,ops_per_sec
+LockFree::enqueue+dequeue,100000,1150,869565
+LockFree::contention_10ops,50000,1083,923361
+ProcessTable::add_process,100000,69,14492753
+ProcessTable::query_100,10000,1553,643915
+ProcessTable::query_1000,1000,7270,137551
+ZeroCopy::share_memory,100000,72,13888888
+ZeroCopy::verify_shared,100000,98,10204081
+memcpy_64B,100000,41,24390243
+memcpy_4KB,10000,206,4854368
+memset_4KB,10000,149,6711409
+Vec::push_amortized,100000,16,62500000
+BTreeMap::insert,100000,23,43478260
+Arc::clone,100000,59,16949152

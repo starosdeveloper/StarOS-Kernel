@@ -1,0 +1,145 @@
+name: STAR OS Kernel CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          target: aarch64-unknown-none
+          override: true
+          components: rustfmt, clippy
+      
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Run tests
+        working-directory: kernel
+        run: cargo test --lib
+      
+      - name: Run clippy
+        working-directory: kernel
+        run: cargo clippy --lib -- -D warnings
+
+  build:
+    name: Build for ${{ matrix.soc }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        soc: [qualcomm, mediatek, exynos, rpi4]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          target: aarch64-unknown-none
+          override: true
+      
+      - name: Build kernel
+        working-directory: kernel
+        run: |
+          RUSTFLAGS="-C link-arg=-Tlinker-${{ matrix.soc }}.ld" \
+          cargo build --release --target aarch64-unknown-none
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: kernel-${{ matrix.soc }}
+          path: kernel/target/aarch64-unknown-none/release/kernel
+
+  boot-image:
+    name: Build Boot Images
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        version: [v2, v3, v4]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 device-tree-compiler
+      
+      - name: Build boot image
+        working-directory: kernel
+        run: ./build_real_device.sh qualcomm ${{ matrix.version }}
+      
+      - name: Upload boot image
+        uses: actions/upload-artifact@v3
+        with:
+          name: boot-qualcomm-${{ matrix.version }}
+          path: kernel/build/boot-qualcomm-${{ matrix.version }}.img
+
+  qemu-test:
+    name: QEMU Integration Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-aarch64 device-tree-compiler
+      
+      - name: Run QEMU test
+        working-directory: kernel
+        run: timeout 60s ./test_qemu.sh || true
+      
+      - name: Upload QEMU log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: qemu-log
+          path: kernel/build/qemu/qemu.log
+
+  documentation:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      
+      - name: Build docs
+        working-directory: kernel
+        run: cargo doc --no-deps
+      
+      - name: Upload docs
+        uses: actions/upload-artifact@v3
+        with:
+          name: documentation
+          path: kernel/target/doc/

@@ -1,0 +1,103 @@
+/dts-v1/;
+
+/ {
+    compatible = "xiaomi,santoni", "qcom,msm8937";
+    model = "Xiaomi Redmi 4X";
+    #address-cells = <1>;
+    #size-cells = <1>;
+    
+    chosen {
+        bootargs = "console=ttyMSM0,115200 androidboot.hardware=qcom";
+        stdout-path = "serial0:115200n8";
+    };
+    
+    memory@80000000 {
+        device_type = "memory";
+        reg = <0x80000000 0x80000000>; // 2GB RAM
+    };
+    
+    soc {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+        compatible = "simple-bus";
+        
+        // MDSS (Mobile Display SubSystem)
+        mdss@1a00000 {
+            compatible = "qcom,mdss";
+            reg = <0x1a00000 0x90000>,
+                  <0x1a94000 0x400>;
+            interrupts = <0 72 0>;
+            
+            mdss_dsi0: dsi@1a94000 {
+                compatible = "qcom,mdss-dsi-ctrl";
+                reg = <0x1a94000 0x400>;
+                
+                panel@0 {
+                    compatible = "tianma,nt35596-720p";
+                    reg = <0>;
+                    
+                    display-timings {
+                        timing0 {
+                            clock-frequency = <60000000>;
+                            hactive = <720>;
+                            vactive = <1280>;
+                            hfront-porch = <80>;
+                            hback-porch = <60>;
+                            hsync-len = <10>;
+                            vfront-porch = <16>;
+                            vback-porch = <14>;
+                            vsync-len = <2>;
+                        };
+                    };
+                };
+            };
+        };
+        
+        // WCD Audio Codec
+        wcd_codec@c0f0000 {
+            compatible = "qcom,wcd9335-codec";
+            reg = <0xc0f0000 0x4000>;
+            interrupts = <0 155 0>;
+            
+            qcom,cdc-micbias1-mv = <1800>;
+            qcom,cdc-micbias2-mv = <1800>;
+        };
+        
+        // I2C for touch
+        i2c@78b7000 {
+            compatible = "qcom,i2c-msm-v2";
+            reg = <0x78b7000 0x600>;
+            interrupts = <0 97 0>;
+            
+            touchscreen@5d {
+                compatible = "goodix,gt917s";
+                reg = <0x5d>;
+                interrupt-parent = <&tlmm>;
+                interrupts = <65 0x2008>;
+                
+                touchscreen-size-x = <720>;
+                touchscreen-size-y = <1280>;
+            };
+        };
+        
+        // UART for console
+        serial@78af000 {
+            compatible = "qcom,msm-uartdm-v1.4", "qcom,msm-uartdm";
+            reg = <0x78af000 0x200>;
+            interrupts = <0 107 0>;
+        };
+        
+        // PMIC (Power Management IC)
+        pmic@0 {
+            compatible = "qcom,pm8937";
+            reg = <0>;
+            
+            pm8937_gpios: gpios {
+                compatible = "qcom,pm8937-gpio";
+                gpio-controller;
+                #gpio-cells = <2>;
+            };
+        };
+    };
+};

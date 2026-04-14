@@ -1,0 +1,14 @@
+{
+  "version": "0.4.0-alpha1",
+  "build_date": "20260224",
+  "target": "PinePhone Pro",
+  "kernel_size": 3660908,
+  "bootloader_size": 235290,
+  "features": [
+    "telephony",
+    "audio",
+    "incoming_calls",
+    "long_sms",
+    "error_handling"
+  ]
+}

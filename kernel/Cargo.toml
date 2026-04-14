@@ -1,0 +1,107 @@
+[package]
+name = "staros-kernel"
+version = "0.1.0-alpha"
+authors = ["STAR OS Team"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "STAR OS Microkernel - ARM64 kernel for mobile devices"
+repository = "https://github.com/staros/kernel"
+keywords = ["kernel", "arm64", "microkernel", "embedded"]
+categories = ["embedded", "no-std"]
+
+[lib]
+crate-type = ["rlib"]
+
+[[bin]]
+name = "kernel"
+path = "src/main.rs"
+
+[[bin]]
+name = "pq-sign-tool"
+path = "src/bin/pq-sign-tool.rs"
+required-features = ["std"]
+
+[dependencies]
+# Core dependencies
+spin = "0.9"
+log = { version = "0.4", default-features = false }
+
+# Post-quantum cryptography - lightweight, no_std compatible
+# Note: Using vendored implementations for no_std support
+
+[dev-dependencies]
+# criterion = "0.5"  # Temporarily disabled due to serde_core bug
+rand = "0.8"  # For fuzzing tests
+
+[features]
+default = []
+std = []  # Feature for std support (used in tests)
+test-support = ["std"]  # Feature for test infrastructure
+
+[[test]]
+name = "ghost_bus_standalone"
+harness = false
+
+[[test]]
+name = "ghost_bus_tests"
+harness = true
+
+[[test]]
+name = "physical_allocator_tests"
+harness = true
+required-features = ["std"]
+
+[[test]]
+name = "virtual_memory_tests"
+harness = true
+required-features = ["std"]
+
+[[test]]
+name = "heap_allocator_tests"
+harness = true
+required-features = ["std"]
+
+[[test]]
+name = "dtb_integration"
+path = "../tests/dtb_integration.rs"
+harness = true
+required-features = ["std"]
+
+[[test]]
+name = "bus_integration"
+path = "../tests/bus_integration.rs"
+harness = true
+required-features = ["std"]
+
+[[test]]
+name = "simple_test"
+path = "../tests/simple_test.rs"
+harness = true
+required-features = ["std"]
+
+[[bench]]
+name = "kyber_bench"
+harness = false
+
+# Production optimization profiles
+[profile.release]
+opt-level = 3              # Maximum optimization
+lto = true                 # Link-Time Optimization for better performance
+codegen-units = 1          # Single codegen unit for maximum optimization
+panic = "abort"            # Abort on panic (smaller binary, faster)
+strip = true               # Strip symbols
+overflow-checks = false    # Disable overflow checks in release
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true               # Keep debug info for profiling
+strip = false
+
+[profile.dev]
+opt-level = 0              # No optimization for faster compilation
+debug = true
+panic = "abort"
+
+[profile.test]
+opt-level = 2              # Some optimization for tests
+debug = true

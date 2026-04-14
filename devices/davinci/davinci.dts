@@ -1,0 +1,169 @@
+/dts-v1/;
+
+/ {
+    compatible = "xiaomi,davinci", "qcom,sm7150";
+    model = "Xiaomi Mi 9T";
+    
+    #address-cells = <2>;
+    #size-cells = <2>;
+    
+    chosen {
+        bootargs = "console=ttyMSM0,115200n8";
+        stdout-path = "serial0:115200n8";
+    };
+    
+    memory@80000000 {
+        device_type = "memory";
+        reg = <0x0 0x80000000 0x0 0x180000000>; // 6GB RAM
+    };
+    
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+        compatible = "simple-bus";
+        
+        // UART for console
+        serial@a84000 {
+            compatible = "qcom,msm-uartdm-v1.4", "qcom,msm-uartdm";
+            reg = <0x0 0xa84000 0x0 0x1000>;
+            interrupts = <0 314 0>;
+            clocks = <&gcc 0>, <&gcc 1>;
+            clock-names = "core", "iface";
+        };
+        
+        // Display subsystem (MDSS)
+        mdss@ae00000 {
+            compatible = "qcom,mdss";
+            reg = <0x0 0xae00000 0x0 0x1000>;
+            interrupts = <0 83 0>;
+            
+            mdss_dsi0: dsi@ae94000 {
+                compatible = "qcom,mdss-dsi-ctrl";
+                reg = <0x0 0xae94000 0x0 0x400>;
+                interrupts = <0 82 0>;
+                
+                panel-type = "amoled";
+                panel-width = <1080>;
+                panel-height = <2340>;
+                panel-refresh-rate = <60>;
+                
+                panel@0 {
+                    compatible = "xiaomi,davinci-amoled";
+                    reg = <0>;
+                    
+                    vddio-supply = <&pm8150_l14>;
+                    vdd-supply = <&pm8150l_l11>;
+                    
+                    reset-gpios = <&tlmm 6 0>;
+                    
+                    port {
+                        panel_in: endpoint {
+                            remote-endpoint = <&dsi0_out>;
+                        };
+                    };
+                };
+                
+                ports {
+                    port@1 {
+                        dsi0_out: endpoint {
+                            remote-endpoint = <&panel_in>;
+                        };
+                    };
+                };
+            };
+        };
+        
+        // Modem subsystem
+        modem@4080000 {
+            compatible = "qcom,modem";
+            reg = <0x0 0x4080000 0x0 0x100000>;
+            
+            qmi-port = "/dev/cdc-wdm0";
+            at-port = "/dev/ttyUSB2";
+            
+            rmnet {
+                compatible = "qcom,rmnet";
+                mux-id = <0x81>;
+            };
+        };
+        
+        // Audio codec (WCD9340)
+        audio@c0c0000 {
+            compatible = "qcom,wcd9340";
+            reg = <0x0 0xc0c0000 0x0 0x1000>;
+            interrupts = <0 155 0>;
+            
+            clocks = <&gcc 100>;
+            clock-names = "mclk";
+            
+            vdd-supply = <&pm8150_s4>;
+            vdd-io-supply = <&pm8150_s4>;
+            
+            qcom,micbias1-microvolt = <1800000>;
+            qcom,micbias2-microvolt = <1800000>;
+        };
+        
+        // Pop-up camera motor
+        popup-camera {
+            compatible = "xiaomi,popup-camera";
+            
+            motor-gpio = <&tlmm 91 0>;
+            motor-time-ms = <500>;
+            
+            vdd-supply = <&pm8150l_l7>;
+        };
+        
+        // GPIO controller
+        tlmm: pinctrl@3400000 {
+            compatible = "qcom,sm7150-pinctrl";
+            reg = <0x0 0x3400000 0x0 0xc00000>;
+            interrupts = <0 208 0>;
+            gpio-controller;
+            #gpio-cells = <2>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+        };
+        
+        // Power management
+        pm8150_s4: regulator@1c00 {
+            compatible = "qcom,rpm-smd-regulator";
+            reg = <0x1c00>;
+            regulator-name = "pm8150_s4";
+            regulator-min-microvolt = <1800000>;
+            regulator-max-microvolt = <1800000>;
+        };
+        
+        pm8150_l14: regulator@4d00 {
+            compatible = "qcom,rpm-smd-regulator";
+            reg = <0x4d00>;
+            regulator-name = "pm8150_l14";
+            regulator-min-microvolt = <1800000>;
+            regulator-max-microvolt = <1800000>;
+        };
+        
+        pm8150l_l11: regulator@4a00 {
+            compatible = "qcom,rpm-smd-regulator";
+            reg = <0x4a00>;
+            regulator-name = "pm8150l_l11";
+            regulator-min-microvolt = <3000000>;
+            regulator-max-microvolt = <3000000>;
+        };
+        
+        pm8150l_l7: regulator@4600 {
+            compatible = "qcom,rpm-smd-regulator";
+            reg = <0x4600>;
+            regulator-name = "pm8150l_l7";
+            regulator-min-microvolt = <2800000>;
+            regulator-max-microvolt = <2800000>;
+        };
+        
+        // Clock controller
+        gcc: clock-controller@100000 {
+            compatible = "qcom,gcc-sm7150";
+            reg = <0x0 0x100000 0x0 0x1f0000>;
+            #clock-cells = <1>;
+            #reset-cells = <1>;
+        };
+    };
+};
