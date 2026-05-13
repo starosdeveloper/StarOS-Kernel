@@ -229,7 +229,7 @@ impl InputManager {
                 InputEvent::KeyDown { .. } | InputEvent::KeyUp { .. } => {
                     self.dispatch_global(event);
                 }
-                InputEvent::Touch { x, y, pressed, id } => {
+                InputEvent::Touch { x, y, pressed, id: _ } => {
                     // Treat touch as mouse for now.
                     let ev = InputEvent::MouseButton {
                         buttons: btn::LEFT,

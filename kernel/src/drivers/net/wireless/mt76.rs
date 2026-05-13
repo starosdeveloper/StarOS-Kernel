@@ -8,11 +8,10 @@
 //! MT76 chips include an onboard MCU running its own firmware.
 //! Commands are sent via a mailbox register interface (MT_INT_SOURCE_CSR).
 
-use core::sync::atomic::{AtomicU32, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
 use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};
-use super::{WirelessDev, WirelessOps, ScanResult, ConnectReq, Band, Channel, MAX_SCAN_RESULTS};
+use super::{WirelessDev, WirelessOps, ScanResult, ConnectReq, Band, Channel};
 
 // ---------------------------------------------------------------------------
 // Register map  (MT7615 base = 0x1800_0000)
@@ -105,21 +104,30 @@ pub fn alloc_hw(base: u64) -> Result<u8, KernelError> {
 // ---------------------------------------------------------------------------
 
 fn chip_base(hw_idx: u8) -> u64 {
-    MT76_TABLE.lock()[hw_idx as usize].base
+    let idx = hw_idx as usize;
+    let tbl = MT76_TABLE.lock();
+    if idx >= tbl.len() { return 0; }
+    tbl[idx].base
 }
 
 fn reg_off(reg: u64) -> u64 { reg - MT76_BASE }
 
 fn chip_read(hw_idx: u8, reg: u64) -> u32 {
-    read_reg(chip_base(hw_idx) + reg_off(reg))
+    let base = chip_base(hw_idx);
+    if base == 0 { return 0; }
+    read_reg(base + reg_off(reg))
 }
 
 fn chip_write(hw_idx: u8, reg: u64, val: u32) {
-    write_reg(chip_base(hw_idx) + reg_off(reg), val);
+    let base = chip_base(hw_idx);
+    if base == 0 { return; }
+    write_reg(base + reg_off(reg), val);
 }
 
 fn chip_rmw(hw_idx: u8, reg: u64, mask: u32, val: u32) {
-    rmw_reg(chip_base(hw_idx) + reg_off(reg), mask, val);
+    let base = chip_base(hw_idx);
+    if base == 0 { return; }
+    rmw_reg(base + reg_off(reg), mask, val);
 }
 
 // ---------------------------------------------------------------------------

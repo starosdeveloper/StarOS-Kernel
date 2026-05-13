@@ -319,7 +319,7 @@ pub fn of_address_to_resource(
 ///
 /// Returns virtual address, or None on error.
 pub fn of_iomap(dev: Option<&DeviceNode>, index: usize) -> Option<*mut u8> {
-    let (phys_addr, size) = of_address_to_resource(dev, index).ok()?;
+    let (phys_addr, _size) = of_address_to_resource(dev, index).ok()?;
     
     // Map physical address to virtual
     // This would use actual memory mapping in real implementation

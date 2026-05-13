@@ -2,8 +2,6 @@
 //!
 //! Parses Flattened Device Tree (FDT) to discover hardware
 
-#[cfg(not(feature = "std"))]
-use core::slice;
 #[cfg(feature = "std")]
 use std::slice;
 
@@ -126,7 +124,7 @@ impl DeviceDiscovery {
         }
 
         // Find timer frequency
-        if let Some(node) = dt.find_node("/timer") {
+        if let Some(_node) = dt.find_node("/timer") {
             // Would parse clock-frequency property
             self.timer_freq = Some(24_000_000); // Default 24MHz
         }

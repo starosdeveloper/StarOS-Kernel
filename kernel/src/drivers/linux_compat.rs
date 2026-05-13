@@ -136,7 +136,7 @@ pub fn example_hotplug_scenario() {
 pub fn example_list_drivers() {
     let drivers = global_driver_manager().list_drivers();
     // println!("Registered drivers: {}", drivers.len());
-    for driver in drivers {
+    for _driver in drivers {
         // println!("  - {}", driver);
     }
 }

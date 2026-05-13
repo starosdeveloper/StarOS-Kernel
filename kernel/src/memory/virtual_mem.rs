@@ -63,6 +63,7 @@ impl Flags {
     pub const ACCESSED: Self = Self(1 << 10);  // Accessed flag
     pub const DIRTY: Self = Self(1 << 51);     // Dirty flag (software)
     pub const COW: Self = Self(1 << 52);       // Copy-on-write (software)
+    pub const EXECUTE: Self = Self(1 << 53); // Execute permission (PXN inverted)
 
     // Common combinations
     pub const KERNEL_RO: Self = Self(Self::VALID.0 | Self::READ_ONLY.0);
@@ -89,6 +90,17 @@ impl Flags {
     pub const fn remove(&self, other: Self) -> Self {
         Self(self.0 & !other.0)
     }
+}
+
+/// Validate that flags don't violate W^X policy.
+/// A page cannot be both writable AND executable.
+pub fn validate_wx(flags: Flags) -> Result<(), KernelError> {
+    let writable = !flags.contains(Flags::READ_ONLY);
+    let executable = flags.contains(Flags::EXECUTE);
+    if writable && executable {
+        return Err(KernelError::Security(SecurityError::PermissionDenied));
+    }
+    Ok(())
 }
 
 /// Page table entry (ARM64 format)
@@ -214,6 +226,8 @@ impl VirtualMemory {
             return Err(KernelError::Memory(MemoryError::InvalidAlignment));
         }
 
+        validate_wx(flags)?;
+
         // Walk page table hierarchy, creating tables as needed
         let mut current_table_phys = self.root_table;
 
@@ -292,8 +306,18 @@ impl VirtualMemory {
         let phys = entry.phys_addr();
         entry.clear();
 
-        // TODO: Free intermediate page tables if empty
-        // TODO: TLB invalidation
+        // TLB invalidation for the unmapped page
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            let virt_page = virt.as_usize() >> 12;
+            core::arch::asm!(
+                "tlbi vale1is, {0}",
+                "dsb ish",
+                "isb",
+                in(reg) virt_page,
+                options(nostack)
+            );
+        }
 
         Ok(phys)
     }
@@ -335,6 +359,8 @@ impl VirtualMemory {
             return Err(KernelError::Memory(MemoryError::InvalidAlignment));
         }
 
+        validate_wx(flags)?;
+
         // Walk page table hierarchy
         let mut current_table_phys = self.root_table;
 
@@ -363,13 +389,24 @@ impl VirtualMemory {
 
         entry.set_flags(flags.union(Flags::VALID));
 
-        // TODO: TLB invalidation
+        // TLB invalidation after permission change
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            let virt_page = virt.as_usize() >> 12;
+            core::arch::asm!(
+                "tlbi vale1is, {0}",
+                "dsb ish",
+                "isb",
+                in(reg) virt_page,
+                options(nostack)
+            );
+        }
 
         Ok(())
     }
 }
 
-use crate::error::{KernelError, MemoryError};
+use crate::error::{KernelError, MemoryError, SecurityError};
 use super::PhysicalAllocator;
 
 // SAFETY: VirtualMemory uses raw pointer to PhysicalAllocator but doesn't

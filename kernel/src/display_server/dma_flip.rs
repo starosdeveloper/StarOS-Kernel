@@ -90,6 +90,11 @@ impl DmaFlip {
         chan: &DmaChannel,
         tracker: &DmaCookieTracker,
     ) -> Result<FlipCookie, DmaFlipError> {
+        // Prevent double-submit while a flip is still in flight.
+        if self.pending.is_some() {
+            return Err(DmaFlipError::Busy);
+        }
+
         // Prepare descriptor: back-buffer → framebuffer.
         let desc = ops
             .device_prep_dma_memcpy(self.fb_phys, self.bb_phys, self.transfer_len)

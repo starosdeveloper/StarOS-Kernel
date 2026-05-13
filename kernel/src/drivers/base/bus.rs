@@ -297,6 +297,11 @@ pub fn bus_add_device(dev: *mut Device) -> Result<()> {
             .find(|sp| sp.bus.name == bus.name)
             .ok_or(BusError::InvalidBus)?;
 
+        // Prevent double-registration which could corrupt internal lists
+        if sp.devices.iter().any(|d| d.get() == dev) {
+            return Err(BusError::Busy);
+        }
+
         sp.devices.push(SendPtr::new(dev));
         Ok(())
     }

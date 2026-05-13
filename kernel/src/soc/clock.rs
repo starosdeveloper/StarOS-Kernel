@@ -231,6 +231,10 @@ impl ClockController {
             return Err(KernelError::NotInitialized);
         }
 
+        if rate_hz == 0 || rate_hz > self.source_freq {
+            return Err(KernelError::InvalidAddress);
+        }
+
         let divider = self.calculate_divider(rate_hz)?;
         
         let clock = self.clocks.iter_mut()

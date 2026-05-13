@@ -14,13 +14,11 @@
 //!   TX: [type(1)] [payload...]
 //!   RX: [type(1)] [payload...]  — assembles multi-byte packets in rx_state machine
 
-use core::sync::atomic::{AtomicU8, AtomicBool, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
-use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};
+use crate::drivers::clk::mmio::{read_reg, write_reg};
 use crate::net::bluetooth::hci::{
-    HciDev, HciTransport, hci_register_dev,
-    HCI_COMMAND_PKT, HCI_ACLDATA_PKT, HCI_EVENT_PKT,
+    HciDev, HciTransport, hci_register_dev, HCI_ACLDATA_PKT, HCI_EVENT_PKT,
 };
 
 // ---------------------------------------------------------------------------
@@ -295,7 +293,7 @@ pub static HCI_UART_TRANSPORT: HciTransport = HciTransport {
 /// Probe and register a UART Bluetooth controller.
 pub fn hci_uart_probe(base: u64, baud: u32, mac: [u8; 6]) -> Result<u8, KernelError> {
     let hw_idx = alloc_hw(base, baud)?;
-    let mut dev = HciDev::new(hw_idx);
+    let dev = HciDev::new(hw_idx);
     *dev.bdaddr.lock() = mac;
     let id = hci_register_dev(dev)?;
     Ok(id)

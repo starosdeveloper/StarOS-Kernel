@@ -45,11 +45,19 @@ impl Watchdog {
         
         let base = WATCHDOG_BASE.load(Ordering::Acquire);
         if base == 0 {
+            // Watchdog not initialized — do not write to uninitialized MMIO address
+            return;
+        }
+
+        // Verify frequency is set (indicates init_from_dt completed successfully)
+        if TIMER_FREQ.load(Ordering::Acquire) == 0 {
             return;
         }
         
         LAST_KICK.store(Self::get_time(), Ordering::Release);
         
+        // SAFETY: base was validated non-zero and set during init_from_dt,
+        // which verified the address before storing it.
         unsafe {
             let timeout = core::ptr::read_volatile((base + 0x28) as *const u64);
             core::ptr::write_volatile((base + 0x28) as *mut u64, timeout);

@@ -230,6 +230,17 @@ pub struct Task {
     // Resource tracking
     owned_pages: u64,
     max_pages: u64,
+    open_fds: u64,
+    max_fds: u64,
+    memory_allocated: u64,
+    max_memory: u64,
+}
+
+impl Task {
+    /// Maximum open file descriptors per task
+    pub const DEFAULT_MAX_FDS: u64 = 1024;
+    /// Maximum memory allocation per task (256MB)
+    pub const DEFAULT_MAX_MEMORY: u64 = 256 * 1024 * 1024;
 }
 
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
@@ -263,6 +274,10 @@ impl Task {
             stats: TaskStats::new(),
             owned_pages: 0,
             max_pages,
+            open_fds: 0,
+            max_fds: Self::DEFAULT_MAX_FDS,
+            memory_allocated: 0,
+            max_memory: Self::DEFAULT_MAX_MEMORY,
         })
     }
 
@@ -374,6 +389,12 @@ impl Task {
     /// Check resource limits
     pub fn check_limits(&self) -> Result<(), KernelError> {
         if self.owned_pages > self.max_pages {
+            return Err(KernelError::ResourceExhausted);
+        }
+        if self.open_fds > self.max_fds {
+            return Err(KernelError::ResourceExhausted);
+        }
+        if self.memory_allocated > self.max_memory {
             return Err(KernelError::ResourceExhausted);
         }
         Ok(())

@@ -120,12 +120,15 @@ pub fn chacha20_block(key: &[u8; 32], nonce: &[u8; 12], counter: u32) -> [u8; 64
         output[i * 4..(i + 1) * 4].copy_from_slice(&working[i].to_le_bytes());
     }
     
-    // Zeroize sensitive intermediate state
-    // This prevents key material from lingering in memory
-    // Note: Compiler may optimize this away - use volatile writes in production
+    // SECURITY: Zeroize sensitive intermediate state using volatile writes
+    // to prevent compiler from optimizing away the zeroing.
+    // This prevents key material from lingering on the stack.
     for i in 0..16 {
-        state[i] = 0;
-        working[i] = 0;
+        // SAFETY: Pointers are valid stack-local array elements
+        unsafe {
+            core::ptr::write_volatile(&mut state[i], 0);
+            core::ptr::write_volatile(&mut working[i], 0);
+        }
     }
     
     output

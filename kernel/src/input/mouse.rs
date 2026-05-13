@@ -23,7 +23,7 @@
 //!  Byte 3: Wheel (signed, optional)
 //! ```
 
-use super::event::{EventQueue, InputEvent, btn};
+use super::event::{EventQueue, InputEvent};
 use crate::error::KernelError;
 use crate::interrupts::Irq;
 

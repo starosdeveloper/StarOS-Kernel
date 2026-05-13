@@ -195,6 +195,17 @@ pub fn at_send_cmd(dev_idx: u8, cmd: &AtCmd) -> Result<(), KernelError> {
     use crate::drivers::clk::mmio::write_reg;
     use super::qmi_wwan::qmi_wwan_base;
 
+    // Reject commands longer than 256 bytes
+    if cmd.len > 256 {
+        return Err(KernelError::InvalidParameter(""));
+    }
+    // Reject commands containing embedded CR or LF (injection prevention)
+    for &b in cmd.as_str() {
+        if b == b'\r' || b == b'\n' {
+            return Err(KernelError::InvalidParameter(""));
+        }
+    }
+
     let base = qmi_wwan_base(dev_idx);
 
     {

@@ -5,12 +5,11 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use crate::drivers::traits::{DeviceId, BasicDevice, DeviceResult, DeviceError};
+use crate::drivers::traits::{BasicDevice, DeviceResult, DeviceError};
 use crate::prelude::*;
-use crate::drivers::bus::{Bus, BusType, BusScanResult};
+use crate::drivers::bus::{Bus, BusScanResult};
 use crate::drivers::registry::{DeviceHandle, global_registry};
 use crate::drivers::driver_manager::{ExtendedDeviceId, global_driver_manager};
-use spin::RwLock;
 
 /// Bus scanner - finds devices on buses
 pub struct BusScanner {

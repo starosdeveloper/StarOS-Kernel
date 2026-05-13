@@ -72,6 +72,8 @@ pub struct EventQueue {
     buf:  [InputEvent; QUEUE_CAPACITY],
     head: AtomicUsize, // consumer reads here
     tail: AtomicUsize, // producer writes here
+    /// Number of oldest events dropped due to queue overflow.
+    dropped_count: AtomicUsize,
 }
 
 impl EventQueue {
@@ -81,20 +83,26 @@ impl EventQueue {
             buf:  [InputEvent::MouseMove { dx: 0, dy: 0 }; QUEUE_CAPACITY],
             head: AtomicUsize::new(0),
             tail: AtomicUsize::new(0),
+            dropped_count: AtomicUsize::new(0),
         }
     }
 
     /// Push an event from **interrupt context** (producer side).
     ///
-    /// Returns `false` and drops the event if the queue is full.
+    /// If the queue is full, drops the oldest event to make room.
+    /// Returns `false` if an oldest event was dropped.
     #[inline]
     pub fn push(&self, event: InputEvent) -> bool {
         let tail = self.tail.load(Ordering::Relaxed);
         let next_tail = (tail + 1) & MASK;
 
+        let mut dropped = false;
         if next_tail == self.head.load(Ordering::Acquire) {
-            // Queue full — drop the event.
-            return false;
+            // Queue full — advance head to drop oldest event.
+            let head = self.head.load(Ordering::Relaxed);
+            self.head.store((head + 1) & MASK, Ordering::Release);
+            self.dropped_count.fetch_add(1, Ordering::Relaxed);
+            dropped = true;
         }
 
         // SAFETY: only the producer touches `buf[tail]`, and we hold the
@@ -105,7 +113,12 @@ impl EventQueue {
         }
 
         self.tail.store(next_tail, Ordering::Release);
-        true
+        !dropped
+    }
+
+    /// Returns the number of events dropped due to overflow.
+    pub fn dropped_count(&self) -> usize {
+        self.dropped_count.load(Ordering::Relaxed)
     }
 
     /// Pop an event from the **render loop** (consumer side).

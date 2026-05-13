@@ -20,7 +20,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
-use crate::drivers::clk::mmio::{read_reg, write_reg};
+use crate::drivers::clk::mmio::write_reg;
 use super::v4l2::V4l2PixFmt;
 
 // ---------------------------------------------------------------------------

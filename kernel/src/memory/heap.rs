@@ -329,21 +329,36 @@ unsafe impl GlobalAlloc for HeapAllocator {
         let size = layout.size();
         let align = layout.align();
 
-        // For now, ignore alignment > 8 (TODO: handle properly)
-        if align > 8 && size < 4096 {
+        // Reject zero-size allocations
+        if size == 0 {
+            return ptr::null_mut();
+        }
+
+        // Reject alignments we can't satisfy
+        if align > 4096 {
             return ptr::null_mut();
         }
 
         if size < 4096 {
-            // Use SLAB
+            // Reject if alignment exceeds slab block size
+            if align > size.max(8).next_power_of_two() {
+                return ptr::null_mut();
+            }
             // SAFETY: UnsafeCell provides interior mutability, single-threaded access guaranteed
             // by kernel synchronization primitives at higher level
             let slab = &mut *self.slab.get();
             slab.alloc(size).unwrap_or(ptr::null_mut())
         } else {
-            // Use Buddy
-            let pages = (size + 4095) / 4096;
+            // Use Buddy - check for overflow in page calculation
+            let pages = match size.checked_add(4095) {
+                Some(v) => v / 4096,
+                None => return ptr::null_mut(),
+            };
             let order = pages.next_power_of_two().trailing_zeros() as usize;
+            
+            if order >= 11 {
+                return ptr::null_mut();
+            }
             
             // SAFETY: Same as above - interior mutability with external synchronization
             let buddy = &mut *self.buddy.get();
@@ -352,7 +367,15 @@ unsafe impl GlobalAlloc for HeapAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: Null pointer deallocation is a no-op (defensive)
+        if ptr.is_null() {
+            return;
+        }
+
         let size = layout.size();
+        if size == 0 {
+            return;
+        }
 
         if size < 4096 {
             // SAFETY: ptr is valid allocation from alloc(), size matches original allocation
@@ -362,6 +385,10 @@ unsafe impl GlobalAlloc for HeapAllocator {
         } else {
             let pages = (size + 4095) / 4096;
             let order = pages.next_power_of_two().trailing_zeros() as usize;
+            
+            if order >= 11 {
+                return; // Invalid order, silently ignore to avoid UB
+            }
             
             // SAFETY: ptr is valid allocation, order matches original allocation
             // Interior mutability with external synchronization
@@ -377,6 +404,44 @@ unsafe impl Send for HeapAllocator {}
 // SAFETY: Thread-safe through external synchronization at kernel level
 // UnsafeCell provides interior mutability, actual sync handled by caller
 unsafe impl Sync for HeapAllocator {}
+
+#[cfg(not(feature = "std"))]
+use core::sync::atomic::{AtomicPtr, Ordering as AtomicOrdering};
+#[cfg(feature = "std")]
+use std::sync::atomic::{AtomicPtr, Ordering as AtomicOrdering};
+
+static GLOBAL_HEAP: AtomicPtr<HeapAllocator> = AtomicPtr::new(ptr::null_mut());
+
+impl HeapAllocator {
+    /// Register a HeapAllocator instance as the global heap.
+    ///
+    /// # Safety: ptr must point to a valid, long-lived HeapAllocator.
+    pub unsafe fn set_global(ptr: *mut HeapAllocator) {
+        GLOBAL_HEAP.store(ptr, AtomicOrdering::Release);
+    }
+
+    /// Allocate via the global heap allocator.
+    ///
+    /// # Safety: global heap must have been set via `set_global`.
+    pub unsafe fn global_alloc(layout: Layout) -> *mut u8 {
+        let heap = GLOBAL_HEAP.load(AtomicOrdering::Acquire);
+        if heap.is_null() {
+            return ptr::null_mut();
+        }
+        (*heap).alloc(layout)
+    }
+
+    /// Deallocate via the global heap allocator.
+    ///
+    /// # Safety: ptr must have been allocated by `global_alloc`.
+    pub unsafe fn global_dealloc(ptr: *mut u8, layout: Layout) {
+        let heap = GLOBAL_HEAP.load(AtomicOrdering::Acquire);
+        if heap.is_null() {
+            return;
+        }
+        (*heap).dealloc(ptr, layout);
+    }
+}
 
 #[cfg(test)]
 mod tests {

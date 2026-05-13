@@ -55,75 +55,97 @@ fn print_number(mut n: u32) {
     }
 }
 
+fn print_hex64(val: u64) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    for i in (0..16).rev() {
+        uart_putc(HEX[((val >> (i * 4)) & 0xF) as usize]);
+    }
+    uart_putc(b'\n');
+}
+
 #[cfg(all(not(test), not(feature = "std")))]
 #[panic_handler]
 fn panic_handler(info: &PanicInfo) -> ! {
     let panic_num = PANIC_COUNT.fetch_add(1, Ordering::SeqCst);
     
+    // Double/triple panic: just halt
     if panic_num > 2 {
         unsafe {
             core::arch::asm!("msr daifset, #0xf");
-            loop {
-                core::arch::asm!("wfi");
-            }
+            loop { core::arch::asm!("wfi"); }
         }
     }
 
-    unsafe {
-        core::arch::asm!("msr daifset, #0xf");
-    }
+    // Disable interrupts immediately
+    unsafe { core::arch::asm!("msr daifset, #0xf"); }
 
-    uart_puts("\n\n*** KERNEL PANIC #");
+    uart_puts("\n\n========== KERNEL PANIC ==========\n");
+    uart_puts("Panic #");
     print_number(panic_num as u32);
-    uart_puts(" ***\n");
+    uart_puts("\n");
     
+    // Location
     if let Some(location) = info.location() {
-        uart_puts("Location: ");
+        uart_puts("At: ");
         uart_puts(location.file());
         uart_puts(":");
         print_number(location.line());
-        uart_puts(":");
-        print_number(location.column());
         uart_puts("\n");
     }
 
-    uart_puts("Message: panic occurred\n");
-
-    uart_puts("\nSystem state:\n");
-    uart_puts("  Interrupts: disabled\n");
-    uart_puts("  Panic count: ");
-    print_number(panic_num as u32);
-    uart_puts("\n");
-
-    uart_puts("\nAttempting recovery...\n");
-    
+    // Register dump
+    uart_puts("\n--- Register State ---\n");
     unsafe {
-        let mut el: u64;
+        let sp: u64;
+        let lr: u64;
+        let el: u64;
+        let spsr: u64;
+        let esr: u64;
+        let far: u64;
+        
+        core::arch::asm!("mov {}, sp", out(reg) sp);
+        core::arch::asm!("mov {}, x30", out(reg) lr);
         core::arch::asm!("mrs {}, CurrentEL", out(reg) el);
-        el = (el >> 2) & 0x3;
-        uart_puts("  Current EL: ");
-        print_number(el as u32);
-        uart_puts("\n");
-    }
-
-    uart_puts("\nTriggering watchdog reset in 100ms...\n");
-
-    for i in (0..10).rev() {
-        print_number(i);
-        uart_puts("... ");
-        for _ in 0..100000 {
-            core::hint::spin_loop();
+        core::arch::asm!("mrs {}, SPSR_EL1", out(reg) spsr);
+        core::arch::asm!("mrs {}, ESR_EL1", out(reg) esr);
+        core::arch::asm!("mrs {}, FAR_EL1", out(reg) far);
+        
+        uart_puts("  SP:   0x"); print_hex64(sp);
+        uart_puts("  LR:   0x"); print_hex64(lr);
+        uart_puts("  EL:   "); print_number(((el >> 2) & 3) as u32); uart_puts("\n");
+        uart_puts("  SPSR: 0x"); print_hex64(spsr);
+        uart_puts("  ESR:  0x"); print_hex64(esr);
+        uart_puts("  FAR:  0x"); print_hex64(far);
+        
+        // Stack trace (frame pointer chain)
+        uart_puts("\n--- Stack Trace ---\n");
+        let mut fp: u64;
+        core::arch::asm!("mov {}, x29", out(reg) fp);
+        
+        for i in 0..16 {
+            if fp == 0 || fp & 0x7 != 0 { break; }
+            let ret_addr = core::ptr::read_volatile((fp as *const u64).add(1));
+            let next_fp = core::ptr::read_volatile(fp as *const u64);
+            
+            uart_puts("  #");
+            print_number(i);
+            uart_puts(": 0x");
+            print_hex64(ret_addr);
+            
+            fp = next_fp;
         }
     }
 
-    uart_puts("\n\nReset failed, entering infinite loop.\n");
-    uart_puts("Please power cycle the device.\n");
+    uart_puts("\n--- Recovery ---\n");
+    uart_puts("Attempting watchdog reset...\n");
 
-    loop {
-        unsafe {
-            core::arch::asm!("wfi");
-        }
-    }
+    // Brief delay then halt
+    for _ in 0..500_000 { core::hint::spin_loop(); }
+
+    uart_puts("Reset failed. Device halted.\n");
+    uart_puts("==================================\n");
+
+    loop { unsafe { core::arch::asm!("wfi"); } }
 }
 
 pub fn trigger_recovery() -> ! {

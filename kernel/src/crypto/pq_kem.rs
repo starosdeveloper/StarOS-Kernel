@@ -3,7 +3,7 @@
 //! NOTE: This is a minimal stub implementation for API demonstration.
 //! Production version will use full Kyber768 implementation.
 
-use super::{Result, CryptoError};
+use super::Result;
 
 pub struct KeyPair {
     pub public: PublicKey,

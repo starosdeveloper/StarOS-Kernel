@@ -6,7 +6,7 @@
  * Original Copyright (C) 1996-2005 Paul Mackerras
  */
 
-use crate::drivers::of::base::{DeviceNode, Property, of_find_property, of_get_property};
+use crate::drivers::of::base::{DeviceNode, of_find_property, of_get_property};
 pub use crate::drivers::of::base::{of_property_read_u32, of_property_read_u64, of_property_read_string};
 use core::mem;
 

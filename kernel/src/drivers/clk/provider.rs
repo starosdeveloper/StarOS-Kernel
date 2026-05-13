@@ -278,7 +278,7 @@ fn divider_round_rate(hw: u64, rate: u64, parent_rate: u64) -> u64 {
     let table = DIV_HW_TABLE.lock();
     let d = &table[idx];
     if parent_rate == 0 || rate == 0 { return 0; }
-    let best_div = (parent_rate / rate).max(1).min((1u64 << d.width));
+    let best_div = (parent_rate / rate).max(1).min(1u64 << d.width);
     parent_rate / best_div
 }
 
@@ -288,7 +288,7 @@ fn divider_set_rate(hw: u64, rate: u64, parent_rate: u64) -> Result<u64, ClkErro
     let d = &table[idx];
     if parent_rate == 0 || rate == 0 { return Err(ClkError::RateOutOfRange); }
 
-    let div = (parent_rate / rate).max(1).min((1u64 << d.width)) as u32;
+    let div = (parent_rate / rate).max(1).min(1u64 << d.width) as u32;
     let mask = ((1u32 << d.width) - 1) << d.shift;
     let val_bits = match d.div_type {
         DividerType::Linear     => (div - 1) << d.shift,

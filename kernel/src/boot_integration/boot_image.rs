@@ -98,6 +98,19 @@ impl BootImage {
     }
 
     pub fn pack(&self) -> Result<Vec<u8>> {
+        const MAX_KERNEL_SIZE: usize = 64 * 1024 * 1024; // 64MB
+
+        if self.kernel.is_empty() {
+            return Err(KernelError::InvalidAddress);
+        }
+        if self.kernel.len() > MAX_KERNEL_SIZE {
+            return Err(KernelError::InvalidAddress);
+        }
+        // page_size must be a power of 2
+        if PAGE_SIZE == 0 || (PAGE_SIZE & (PAGE_SIZE - 1)) != 0 {
+            return Err(KernelError::InvalidAddress);
+        }
+
         match self.version {
             BootImageVersion::V2 => self.pack_v2(),
             BootImageVersion::V3 => self.pack_v3(),

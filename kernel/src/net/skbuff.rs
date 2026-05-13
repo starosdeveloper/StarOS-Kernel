@@ -7,7 +7,7 @@
 //! It contains metadata about the packet and pointers to the actual data.
 
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicU32, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 
@@ -335,8 +335,17 @@ impl SkBuff {
     /// Allocate a new sk_buff with specified size
     ///
     /// Ported from: `__alloc_skb()`
-    pub fn alloc(size: usize, gfp_mask: u32) -> Result<Box<Self>, SkBuffError> {
+    ///
+    /// # Security
+    /// - Validates size against MAX_SKB_SIZE
+    /// - Validates size fits in u16 for internal offset tracking
+    pub fn alloc(size: usize, _gfp_mask: u32) -> Result<Box<Self>, SkBuffError> {
         if size > MAX_SKB_SIZE {
+            return Err(SkBuffError::TooLarge);
+        }
+        
+        // Internal offsets (data, tail, end) are u16, so size must fit
+        if size > u16::MAX as usize {
             return Err(SkBuffError::TooLarge);
         }
         
@@ -434,8 +443,13 @@ impl SkBuff {
     /// Reserve headroom in the buffer
     ///
     /// Ported from: `skb_reserve()`
+    ///
+    /// # Panics
+    /// Debug-asserts that reservation doesn't exceed buffer end.
     #[inline]
     pub fn reserve(&mut self, len: usize) {
+        debug_assert!(self.data as usize + len <= self.end as usize,
+            "skb_reserve: headroom exceeds buffer");
         self.data += len as u16;
         self.tail += len as u16;
     }
@@ -536,7 +550,7 @@ impl SkBuff {
         // Increment reference count on original
         self.users.fetch_add(1, Ordering::Relaxed);
         
-        let mut cloned = Box::new(Self {
+        let cloned = Box::new(Self {
             next: None,
             prev: None,
             dev: self.dev,

@@ -320,8 +320,14 @@ impl HciDev {
 
     /// Send an HCI command (opcode + raw parameter bytes).
     ///
+    /// # Security
+    /// - Validates params length fits in u8 (max 255 bytes per HCI spec)
+    ///
     /// Ported from: `hci_send_cmd()`
     pub fn send_cmd(&self, opcode: u16, params: &[u8]) -> Result<(), KernelError> {
+        if params.len() > HCI_MAX_CMD_DATA {
+            return Err(KernelError::InvalidParameter("HCI params too large"));
+        }
         let transport = self.transport.ok_or(KernelError::NotFound)?;
 
         // Build packet: H4 type(1) + opcode(2, LE) + plen(1) + params
@@ -373,12 +379,19 @@ impl HciDev {
 
     /// Dispatch an incoming HCI event packet (without H4 type byte).
     ///
+    /// # Security
+    /// - Validates minimum header size (2 bytes)
+    /// - Rejects truncated events (plen > available data)
+    /// - Validates event parameters before processing
+    ///
     /// Ported from: `hci_event_packet()`
     pub fn recv_event(&self, data: &[u8]) {
         if data.len() < 2 { return; }
         let evt_code = data[0];
         let plen     = data[1] as usize;
-        let params   = if data.len() >= 2 + plen { &data[2..2 + plen] } else { &data[2..] };
+        // Reject truncated events
+        if data.len() < 2 + plen { return; }
+        let params = &data[2..2 + plen];
 
         match evt_code {
             event::CONN_COMPLETE    => self.handle_conn_complete(params),

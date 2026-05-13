@@ -9,10 +9,10 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use crate::drivers::traits::{BasicDevice, DeviceId, DeviceCapabilities, DeviceResult, DeviceError};
+use crate::drivers::traits::{BasicDevice, DeviceId, DeviceResult, DeviceError};
 use crate::prelude::*;
-use crate::drivers::registry::{DeviceRegistry, DeviceHandle};
-use crate::drivers::bus::{BusType, BusScanResult};
+use crate::drivers::registry::DeviceHandle;
+use crate::drivers::bus::BusType;
 use spin::RwLock;
 
 /// Probe strategy (from Linux probe_type)

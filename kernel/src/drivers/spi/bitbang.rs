@@ -8,9 +8,7 @@
 //! Use this for GPIO or shift-register level hardware APIs.
 
 use crate::drivers::spi::core::{SpiController, SpiDevice, SpiTransfer, SpiMode};
-use alloc::boxed::Box;
 use spin::Mutex;
-use core::time::Duration;
 
 /// CS delay in nanoseconds
 const SPI_BITBANG_CS_DELAY: u32 = 100;
@@ -265,7 +263,7 @@ pub fn spi_bitbang_setup_transfer(
     let hz = t.map(|t| if t.speed_hz == 0 { spi.max_speed_hz } else { t.speed_hz }).unwrap_or(spi.max_speed_hz);
 
     // Select transfer function based on word size
-    let txrx_bufs = if bits_per_word <= 8 {
+    let _txrx_bufs = if bits_per_word <= 8 {
         bitbang_txrx_8 as TxRxBufsFn
     } else if bits_per_word <= 16 {
         bitbang_txrx_16 as TxRxBufsFn
@@ -276,7 +274,7 @@ pub fn spi_bitbang_setup_transfer(
     };
 
     // Calculate nanoseconds per half clock cycle
-    let nsecs = if hz > 0 {
+    let _nsecs = if hz > 0 {
         let ns = (NSEC_PER_SEC / 2) / hz as u64;
         if ns > MAX_UDELAY_MS * NSEC_PER_MSEC {
             return Err(-22); // -EINVAL
@@ -301,7 +299,7 @@ pub fn spi_bitbang_setup_transfer(
 ///
 /// Ported from: spi_bitbang_setup()
 /// Source: linux-master/drivers/spi/spi-bitbang.c:177
-pub fn spi_bitbang_setup(spi: &mut SpiDevice, bitbang: &SpiBitbang) -> Result<(), i32> {
+pub fn spi_bitbang_setup(_spi: &mut SpiDevice, _bitbang: &SpiBitbang) -> Result<(), i32> {
     // TODO: Implement controller_state management
     Ok(())
 }
@@ -309,7 +307,7 @@ pub fn spi_bitbang_setup(spi: &mut SpiDevice, bitbang: &SpiBitbang) -> Result<()
 /// Cleanup SPI device
 ///
 /// Ported from: spi_bitbang_cleanup()
-pub fn spi_bitbang_cleanup(spi: &mut SpiDevice) {
+pub fn spi_bitbang_cleanup(_spi: &mut SpiDevice) {
     // TODO: Implement controller_state cleanup
 }
 
@@ -317,9 +315,9 @@ pub fn spi_bitbang_cleanup(spi: &mut SpiDevice) {
 ///
 /// Ported from: spi_bitbang_bufs()
 fn spi_bitbang_bufs(
-    spi: &SpiDevice,
-    t: &SpiTransfer,
-    bitbang: &SpiBitbang,
+    _spi: &SpiDevice,
+    _t: &SpiTransfer,
+    _bitbang: &SpiBitbang,
 ) -> Result<usize, i32> {
     // TODO: Implement after controller_state is added
     Err(-22) // -EINVAL

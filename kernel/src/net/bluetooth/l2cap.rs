@@ -10,7 +10,6 @@
 //! - LE Attribute Protocol routing (CID 0x0004 → ATT)
 //! - Fixed channels: signalling (0x0001), connectionless (0x0002), LE ATT (0x0004)
 
-use core::sync::atomic::{AtomicU16, AtomicU8, AtomicU32, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
 
@@ -262,11 +261,21 @@ pub fn l2cap_chan_close(scid: u16) {
 /// Receive an L2CAP frame from HCI ACL data.
 ///
 /// Ported from: `l2cap_recv_frame()`
+///
+/// # Security
+/// - Validates minimum header size (4 bytes)
+/// - Validates payload length against actual data
+/// - Rejects truncated frames (prevents processing partial data)
 pub fn l2cap_recv_frame(hcon: u16, data: &[u8]) {
     if data.len() < 4 { return; }
     let len = u16::from_le_bytes([data[0], data[1]]) as usize;
     let cid = u16::from_le_bytes([data[2], data[3]]);
-    let payload = if data.len() >= 4 + len { &data[4..4 + len] } else { &data[4..] };
+    
+    // Reject truncated frames - payload must be fully present
+    if data.len() < 4 + len {
+        return;
+    }
+    let payload = &data[4..4 + len];
 
     match cid {
         L2CAP_CID_SIGNALING    => handle_signaling(hcon, payload),
@@ -312,7 +321,12 @@ fn handle_signaling(hcon: u16, data: &[u8]) {
         let ident = data[off + 1];
         let len   = u16::from_le_bytes([data[off + 2], data[off + 3]]) as usize;
         off += 4;
-        let params = if off + len <= data.len() { &data[off..off + len] } else { &data[off..] };
+        
+        // Reject truncated signaling commands
+        if off + len > data.len() {
+            break;
+        }
+        let params = &data[off..off + len];
         off += len;
 
         match code {
@@ -500,7 +514,7 @@ pub fn l2cap_send(scid: u16, data: &[u8]) -> Result<(), KernelError> {
 }
 
 /// Assemble an L2CAP packet and hand it to HCI as ACL data.
-fn l2cap_send_acl(hcon: u16, cid: u16, payload: &[u8]) -> Result<(), KernelError> {
+fn l2cap_send_acl(_hcon: u16, cid: u16, payload: &[u8]) -> Result<(), KernelError> {
     // L2CAP header: len(2) + cid(2)
     let mut hdr = [0u8; 4];
     hdr[0..2].copy_from_slice(&(payload.len() as u16).to_le_bytes());

@@ -1,19 +1,29 @@
-//! Production scheduler with O(1) scheduling
-//!
-//! Features:
-//! - O(1) task selection
-//! - 256 priority levels
-//! - Real-time and normal task classes
-//! - Priority inheritance
-//! - CPU affinity support
+/// Production scheduler with O(1) scheduling
+///
+/// Features:
+/// - O(1) task selection via priority bitmap
+/// - 256 priority levels
+/// - Real-time and normal task classes
+/// - Time slicing with configurable quantum
+/// - Preemption support
+/// - CPU affinity support
 
 #[cfg(not(feature = "std"))]
-use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 #[cfg(feature = "std")]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use crate::error::{KernelError, ProcessError};
-use super::task::{Task, TaskId, Priority, TaskState};
+use super::task::{TaskId, Priority};
+
+/// Default time quantum in timer ticks (10ms at 1kHz)
+pub const DEFAULT_QUANTUM: u64 = 10;
+
+/// Minimum quantum for real-time tasks (1ms)
+pub const RT_MIN_QUANTUM: u64 = 1;
+
+/// Maximum quantum for low-priority tasks (100ms)
+pub const MAX_QUANTUM: u64 = 100;
 
 /// Run queue for a single priority level
 struct RunQueue {
@@ -144,12 +154,18 @@ pub struct Scheduler {
     priority_bitmap: PriorityBitmap,
     // Currently running task
     current: Option<TaskId>,
+    // Current task's priority (cached for re-enqueue)
+    current_priority: Option<Priority>,
     // Idle task
     idle_task: Option<TaskId>,
     // Statistics
     stats: SchedulerStats,
     // Context switches counter
     switches: AtomicU64,
+    // Time slice remaining for current task (in ticks)
+    slice_remaining: u64,
+    // Whether preemption is needed
+    need_resched: bool,
 }
 
 impl Scheduler {
@@ -160,9 +176,52 @@ impl Scheduler {
             run_queues: [INIT_QUEUE; 256],
             priority_bitmap: PriorityBitmap::new(),
             current: None,
+            current_priority: None,
             idle_task: None,
             stats: SchedulerStats::new(),
             switches: AtomicU64::new(0),
+            slice_remaining: DEFAULT_QUANTUM,
+            need_resched: false,
+        }
+    }
+
+    /// Called on every timer tick. Decrements time slice and triggers
+    /// preemption when quantum expires.
+    ///
+    /// Returns true if a reschedule is needed.
+    pub fn tick(&mut self) -> bool {
+        if self.current.is_none() {
+            return false;
+        }
+
+        if self.slice_remaining > 0 {
+            self.slice_remaining -= 1;
+        }
+
+        if self.slice_remaining == 0 {
+            self.need_resched = true;
+        }
+
+        self.need_resched
+    }
+
+    /// Check if preemption is pending
+    pub fn needs_reschedule(&self) -> bool {
+        self.need_resched
+    }
+
+    /// Calculate time quantum based on priority
+    fn quantum_for_priority(priority: Priority) -> u64 {
+        let p = priority.as_u8();
+        if p < 32 {
+            // Real-time: short quantum for responsiveness
+            RT_MIN_QUANTUM + (p as u64)
+        } else if p < 128 {
+            // Normal: standard quantum
+            DEFAULT_QUANTUM
+        } else {
+            // Low priority: longer quantum (less context switches)
+            DEFAULT_QUANTUM * 2
         }
     }
 
@@ -194,6 +253,18 @@ impl Scheduler {
 
     /// Select next task to run (O(1))
     pub fn schedule(&mut self) -> Option<TaskId> {
+        self.need_resched = false;
+
+        // If current task's quantum expired, re-enqueue it
+        if let (Some(task_id), Some(priority)) = (self.current, self.current_priority) {
+            if self.slice_remaining == 0 {
+                let _ = self.enqueue(task_id, priority);
+                self.current = None;
+                self.current_priority = None;
+                self.stats.running_tasks = self.stats.running_tasks.saturating_sub(1);
+            }
+        }
+
         // Find highest priority non-empty queue
         let priority = self.priority_bitmap.find_highest()?;
         
@@ -207,6 +278,9 @@ impl Scheduler {
         
         self.stats.ready_tasks = self.stats.ready_tasks.saturating_sub(1);
         self.stats.running_tasks += 1;
+        
+        // Set time slice for new task
+        self.slice_remaining = Self::quantum_for_priority(Priority::new(priority));
         
         Some(task_id)
     }
@@ -260,6 +334,14 @@ impl Scheduler {
     /// Set current running task
     pub fn set_current(&mut self, task_id: TaskId) {
         self.current = Some(task_id);
+        self.switches.fetch_add(1, Ordering::Relaxed);
+        self.stats.total_switches += 1;
+    }
+
+    /// Set current running task with priority tracking
+    pub fn set_current_with_priority(&mut self, task_id: TaskId, priority: Priority) {
+        self.current = Some(task_id);
+        self.current_priority = Some(priority);
         self.switches.fetch_add(1, Ordering::Relaxed);
         self.stats.total_switches += 1;
     }

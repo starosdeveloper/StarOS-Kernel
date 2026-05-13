@@ -64,6 +64,12 @@ pub const I2C_M_REV_DIR_ADDR: u16 = 0x2000;     // Reverse direction
 pub const I2C_M_NOSTART: u16 = 0x4000;          // No START condition
 pub const I2C_M_STOP: u16 = 0x8000;             // STOP after message
 
+/// Maximum I2C transfer size in bytes
+pub const I2C_MAX_TRANSFER_SIZE: usize = 4096;
+
+/// Minimum valid 7-bit address (addresses 0x00-0x02 are reserved)
+pub const I2C_ADDR_7BITS_MIN: u16 = 0x03;
+
 /// Bus recovery constants
 const RECOVERY_NDELAY: u32 = 5000;              // 5us delay for recovery
 const RECOVERY_CLK_CNT: u32 = 9;                // 9 clock pulses
@@ -103,27 +109,51 @@ pub struct I2cMsg {
 }
 
 impl I2cMsg {
-    /// Create new I2C message
-    pub fn new(addr: u16, flags: u16, buf: Vec<u8>) -> Self {
-        Self { addr, flags, buf }
+    /// Validate I2C address based on flags
+    fn validate_addr(addr: u16, flags: u16) -> Result<()> {
+        if flags & I2C_M_TEN != 0 {
+            if addr > I2C_ADDR_10BITS_MAX {
+                return Err(Error::InvalidArgument);
+            }
+        } else if addr < I2C_ADDR_7BITS_MIN || addr > I2C_ADDR_7BITS_MAX {
+            return Err(Error::InvalidArgument);
+        }
+        Ok(())
+    }
+
+    /// Create new I2C message with validation
+    pub fn new(addr: u16, flags: u16, buf: Vec<u8>) -> Result<Self> {
+        Self::validate_addr(addr, flags)?;
+        if buf.len() > I2C_MAX_TRANSFER_SIZE {
+            return Err(Error::InvalidArgument);
+        }
+        Ok(Self { addr, flags, buf })
     }
 
     /// Create read message
-    pub fn read(addr: u16, len: usize) -> Self {
-        Self {
+    pub fn read(addr: u16, len: usize) -> Result<Self> {
+        Self::validate_addr(addr, I2C_M_RD)?;
+        if len > I2C_MAX_TRANSFER_SIZE {
+            return Err(Error::InvalidArgument);
+        }
+        Ok(Self {
             addr,
             flags: I2C_M_RD,
             buf: vec![0u8; len],
-        }
+        })
     }
 
     /// Create write message
-    pub fn write(addr: u16, data: Vec<u8>) -> Self {
-        Self {
+    pub fn write(addr: u16, data: Vec<u8>) -> Result<Self> {
+        Self::validate_addr(addr, 0)?;
+        if data.len() > I2C_MAX_TRANSFER_SIZE {
+            return Err(Error::InvalidArgument);
+        }
+        Ok(Self {
             addr,
             flags: 0,
             buf: data,
-        }
+        })
     }
 
     /// Check if message is read
@@ -238,7 +268,7 @@ impl I2cAdapter {
         loop {
             match self.algo.master_xfer(self, msgs) {
                 Ok(count) => return Ok(count),
-                Err(e) if attempts < self.retries => {
+                Err(_e) if attempts < self.retries => {
                     attempts += 1;
                     // Small delay before retry
                     for _ in 0..1000 { core::hint::spin_loop(); }
@@ -327,7 +357,7 @@ impl I2cClient {
 
     /// i2c_master_send - Send data to I2C device
     pub fn master_send(&self, buf: &[u8]) -> Result<usize> {
-        let mut msg = I2cMsg::write(self.addr, buf.to_vec());
+        let msg = I2cMsg::write(self.addr, buf.to_vec())?;
         let count = self.adapter.transfer(&mut [msg])?;
         if count == 1 {
             Ok(buf.len())
@@ -338,7 +368,7 @@ impl I2cClient {
 
     /// i2c_master_recv - Receive data from I2C device
     pub fn master_recv(&self, buf: &mut [u8]) -> Result<usize> {
-        let mut msgs = [I2cMsg::read(self.addr, buf.len())];
+        let mut msgs = [I2cMsg::read(self.addr, buf.len())?];
         let count = self.adapter.transfer(&mut msgs)?;
         if count == 1 {
             buf.copy_from_slice(&msgs[0].buf);
@@ -512,12 +542,12 @@ mod tests {
 
     #[test]
     fn test_i2c_msg_creation() {
-        let msg = I2cMsg::read(0x50, 10);
+        let msg = I2cMsg::read(0x50, 10).unwrap();
         assert_eq!(msg.addr, 0x50);
         assert!(msg.is_read());
         assert_eq!(msg.buf.len(), 10);
 
-        let msg = I2cMsg::write(0x51, vec![1, 2, 3]);
+        let msg = I2cMsg::write(0x51, vec![1, 2, 3]).unwrap();
         assert_eq!(msg.addr, 0x51);
         assert!(!msg.is_read());
         assert_eq!(msg.buf.len(), 3);
@@ -573,8 +603,8 @@ mod tests {
         let adapter = Arc::new(I2cAdapter::new("test-i2c".into(), algo, 100_000));
 
         let mut msgs = vec![
-            I2cMsg::write(0x50, vec![0x00]),
-            I2cMsg::read(0x50, 4),
+            I2cMsg::write(0x50, vec![0x00]).unwrap(),
+            I2cMsg::read(0x50, 4).unwrap(),
         ];
 
         let result = adapter.transfer(&mut msgs);

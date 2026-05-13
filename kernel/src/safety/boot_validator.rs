@@ -13,7 +13,8 @@ impl BootValidator {
             return Err(KernelError::InvalidAddress);
         }
 
-        if addr & 0x3 != 0 {
+        // ARM64 requires DTB to be 8-byte aligned
+        if addr & 0x7 != 0 {
             return Err(KernelError::InvalidAddress);
         }
 

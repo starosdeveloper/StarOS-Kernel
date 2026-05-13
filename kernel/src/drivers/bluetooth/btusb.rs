@@ -16,7 +16,6 @@
 //! We model the USB controller as MMIO registers (simplified — real USB
 //! would go through a USB HC driver layer).
 
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
 use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};
@@ -201,7 +200,7 @@ pub static BTUSB_TRANSPORT: HciTransport = HciTransport {
 /// Probe and register a USB Bluetooth dongle.
 pub fn btusb_probe(base: u64, mac: [u8; 6]) -> Result<u8, KernelError> {
     let hw_idx = alloc_hw(base)?;
-    let mut dev = HciDev::new(hw_idx);
+    let dev = HciDev::new(hw_idx);
     *dev.bdaddr.lock() = mac;
     let id = hci_register_dev(dev)?;
     Ok(id)
