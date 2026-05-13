@@ -76,7 +76,7 @@ impl EarlyUart {
         }
     }
 
-    pub fn print_hex(&self, mut val: u64) {
+    pub fn print_hex(&self, val: u64) {
         for i in (0..16).rev() {
             let nibble = ((val >> (i * 4)) & 0xF) as u8;
             let c = if nibble < 10 {

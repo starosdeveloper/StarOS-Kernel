@@ -75,7 +75,7 @@ impl<T> Mutex<T> {
         }
     }
 
-    pub fn lock(&self, task_id: TaskId, priority: Priority) -> Result<MutexGuard<T>, KernelError> {
+    pub fn lock(&self, task_id: TaskId, priority: Priority) -> Result<MutexGuard<'_, T>, KernelError> {
         loop {
             if self.locked.compare_exchange_weak(
                 false, true,
@@ -102,7 +102,7 @@ impl<T> Mutex<T> {
         }
     }
 
-    pub fn try_lock(&self, task_id: TaskId, priority: Priority) -> Option<MutexGuard<T>> {
+    pub fn try_lock(&self, task_id: TaskId, priority: Priority) -> Option<MutexGuard<'_, T>> {
         if self.locked.compare_exchange(
             false, true,
             Ordering::Acquire,
@@ -239,11 +239,11 @@ impl<T> RwLock<T> {
         }
     }
 
-    pub fn read(&self) -> Result<RwLockReadGuard<T>, KernelError> {
+    pub fn read(&self) -> Result<RwLockReadGuard<'_, T>, KernelError> {
         loop {
             // Wait for no writer
             if !self.writer.load(Ordering::Acquire) {
-                let readers = self.readers.fetch_add(1, Ordering::AcqRel);
+                let _readers = self.readers.fetch_add(1, Ordering::AcqRel);
                 
                 // Check again that no writer started
                 if !self.writer.load(Ordering::Acquire) {
@@ -258,7 +258,7 @@ impl<T> RwLock<T> {
         }
     }
 
-    pub fn write(&self) -> Result<RwLockWriteGuard<T>, KernelError> {
+    pub fn write(&self) -> Result<RwLockWriteGuard<'_, T>, KernelError> {
         // Acquire writer lock
         while self.writer.compare_exchange_weak(
             false, true,

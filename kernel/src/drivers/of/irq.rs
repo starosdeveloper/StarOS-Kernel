@@ -7,7 +7,7 @@
  */
 
 use crate::drivers::of::base::{DeviceNode, of_get_property, of_get_parent};
-use crate::drivers::of::property::{of_property_read_u32, of_property_read_string};
+use crate::drivers::of::property::of_property_read_u32;
 use crate::prelude::*;
 use core::sync::atomic::{AtomicPtr, Ordering};
 

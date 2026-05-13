@@ -85,6 +85,11 @@ pub fn driver_register(drv: *mut DriverCore) -> DriverResult<()> {
     }
 
     unsafe {
+        // Reject drivers without a probe function
+        if (*drv).probe.is_none() {
+            return Err(DriverError::InvalidDriver);
+        }
+
         let bus = (*drv).bus.ok_or(DriverError::InvalidBus)?;
 
         // Check if bus is registered (critical safety check!)

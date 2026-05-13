@@ -55,11 +55,15 @@ impl IrqConfig {
     }
 }
 
+/// IRQ storm threshold - disable IRQ after this many spurious triggers
+const SPURIOUS_THRESHOLD: u64 = 100;
+
 /// GICv3 Interrupt Controller
 pub struct InterruptController {
     handlers: [Option<IrqHandler>; 256],
     configs: [IrqConfig; 256],
     enabled: [AtomicBool; 256],
+    unhandled_count: [AtomicU64; 256],
     total_irqs: AtomicU64,
     spurious_irqs: AtomicU64,
 }
@@ -69,11 +73,13 @@ impl InterruptController {
         const INIT_HANDLER: Option<IrqHandler> = None;
         const INIT_CONFIG: IrqConfig = IrqConfig::new(IrqPriority::NORMAL);
         const INIT_ENABLED: AtomicBool = AtomicBool::new(false);
+        const INIT_COUNT: AtomicU64 = AtomicU64::new(0);
 
         Self {
             handlers: [INIT_HANDLER; 256],
             configs: [INIT_CONFIG; 256],
             enabled: [INIT_ENABLED; 256],
+            unhandled_count: [INIT_COUNT; 256],
             total_irqs: AtomicU64::new(0),
             spurious_irqs: AtomicU64::new(0),
         }
@@ -86,6 +92,11 @@ impl InterruptController {
         }
 
         let idx = irq as usize;
+
+        // Reject if IRQ is currently active (enabled) - must unregister first
+        if self.enabled[idx].load(Ordering::Acquire) {
+            return Err(KernelError::Interrupt(InterruptError::AlreadyRegistered));
+        }
         
         if self.handlers[idx].is_some() {
             return Err(KernelError::Interrupt(InterruptError::AlreadyRegistered));
@@ -93,6 +104,7 @@ impl InterruptController {
 
         self.handlers[idx] = Some(handler);
         self.configs[idx] = config;
+        self.unhandled_count[idx].store(0, Ordering::Relaxed);
 
         Ok(())
     }
@@ -185,7 +197,12 @@ impl InterruptController {
         if let Some(handler) = self.handlers[idx] {
             handler(irq)?;
         } else {
+            // No registered handler - spurious IRQ storm detection
+            let count = self.unhandled_count[idx].fetch_add(1, Ordering::Relaxed) + 1;
             self.spurious_irqs.fetch_add(1, Ordering::Relaxed);
+            if count >= SPURIOUS_THRESHOLD {
+                self.enabled[idx].store(false, Ordering::Release);
+            }
             return Err(KernelError::Interrupt(InterruptError::NotRegistered));
         }
 

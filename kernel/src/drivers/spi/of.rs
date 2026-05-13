@@ -6,7 +6,7 @@
 
 use crate::drivers::of::{DeviceNode, OfError};
 use crate::drivers::spi::core::{SpiController, SpiDevice, SpiMode, SpiDelay, SpiDelayUnit, spi_alloc_device};
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 use alloc::sync::Arc;
 
 /// Maximum number of chip selects per device
@@ -92,7 +92,7 @@ pub fn of_spi_parse_dt(
     }
 
     // TX bus width
-    let tx_bus_width = match nc.read_u32_array("spi-tx-bus-width") {
+    let _tx_bus_width = match nc.read_u32_array("spi-tx-bus-width") {
         Ok(widths) if !widths.is_empty() => {
             if widths.len() > max_tx_lanes {
                 return Err(OfError::InvalidValue);
@@ -160,7 +160,7 @@ pub fn of_spi_parse_dt(
     }
 
     // RX bus width
-    let rx_bus_width = match nc.read_u32_array("spi-rx-bus-width") {
+    let _rx_bus_width = match nc.read_u32_array("spi-rx-bus-width") {
         Ok(widths) if !widths.is_empty() => {
             if widths.len() > max_rx_lanes {
                 return Err(OfError::InvalidValue);
@@ -286,7 +286,7 @@ pub fn of_register_spi_device(
 /// # Arguments
 /// * `ctlr` - SPI controller
 /// * `controller_node` - Device Tree node for the controller
-pub fn of_register_spi_devices(ctlr: Arc<SpiController>, controller_node: &DeviceNode) -> Result<(), OfError> {
+pub fn of_register_spi_devices(_ctlr: Arc<SpiController>, _controller_node: &DeviceNode) -> Result<(), OfError> {
     // TODO: Implement child iteration when DeviceNode provides safe iterator
     // For now, just return Ok
     Ok(())

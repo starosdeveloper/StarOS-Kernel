@@ -4,6 +4,7 @@
 
 pub mod entry;
 
+use core::cell::UnsafeCell;
 use crate::error::KernelError;
 use crate::drivers::{DeviceTree, DeviceDiscovery, Uart};
 use crate::memory::{PhysicalAllocator, PhysAddr, PAGE_SIZE};
@@ -57,7 +58,14 @@ impl KernelState {
 }
 
 /// Global kernel state
-pub static mut KERNEL: KernelState = KernelState::new();
+pub struct KernelCell(UnsafeCell<KernelState>);
+unsafe impl Sync for KernelCell {}
+impl KernelCell {
+    pub const fn new() -> Self { Self(UnsafeCell::new(KernelState::new())) }
+    /// # Safety: caller must ensure exclusive access
+    pub unsafe fn get(&self) -> &mut KernelState { &mut *self.0.get() }
+}
+pub static KERNEL: KernelCell = KernelCell::new();
 
 /// Early boot - called from assembly
 /// 
@@ -97,7 +105,7 @@ pub unsafe extern "C" fn kernel_early_boot(boot_info: *const BootInfo) -> ! {
     
     // Initialize syscalls
     kprint("Initializing syscalls...");
-    init_syscalls(&mut KERNEL.syscall_dispatcher);
+    init_syscalls(&mut KERNEL.get().syscall_dispatcher);
     
     // Initialize scheduler
     kprint("Initializing scheduler...");
@@ -133,8 +141,8 @@ unsafe fn init_memory(boot_info: &BootInfo) {
     let base = PhysAddr::new(boot_info.memory_base as usize);
     let pages = (boot_info.memory_size as usize) / PAGE_SIZE;
     
-    KERNEL.phys_allocator = PhysicalAllocator::new(base, pages);
-    KERNEL.phys_allocator.init().expect("Failed to init physical allocator");
+    KERNEL.get().phys_allocator = PhysicalAllocator::new(base, pages);
+    KERNEL.get().phys_allocator.init().expect("Failed to init physical allocator");
     
     kprint("Memory initialized\n");
 }
@@ -142,18 +150,18 @@ unsafe fn init_memory(boot_info: &BootInfo) {
 /// Initialize interrupt subsystem
 unsafe fn init_interrupts() {
     // Register exception handlers
-    fn irq_handler(ctx: &crate::interrupts::ExceptionContext) -> Result<(), KernelError> {
+    fn irq_handler(_ctx: &crate::interrupts::ExceptionContext) -> Result<(), KernelError> {
         // Handle IRQ
         unsafe {
-            KERNEL.interrupt_controller.handle(30)?; // Timer IRQ
+            KERNEL.get().interrupt_controller.handle(30)?; // Timer IRQ
         }
         Ok(())
     }
     
-    KERNEL.exception_table.register_irq_handler(irq_handler);
+    KERNEL.get().exception_table.register_irq_handler(irq_handler);
     
     // Initialize timer
-    KERNEL.timer.init().expect("Failed to init timer");
+    KERNEL.get().timer.init().expect("Failed to init timer");
     
     kprint("Interrupts enabled");
 }
@@ -161,11 +169,11 @@ unsafe fn init_interrupts() {
 /// Initialize scheduler
 unsafe fn init_scheduler() {
     // Create idle task
-    let idle_stack = KERNEL.phys_allocator.alloc_page()
+    let idle_stack = KERNEL.get().phys_allocator.alloc_page()
         .expect("Failed to allocate idle stack");
     
     let idle_task = Task::new(
-        idle_task_entry as u64,
+        idle_task_entry as *const () as u64,
         0,
         crate::memory::VirtAddr::new(idle_stack.as_usize()),
         64 * 1024,
@@ -174,7 +182,7 @@ unsafe fn init_scheduler() {
         1024,
     ).expect("Failed to create idle task");
     
-    KERNEL.scheduler.set_idle_task(idle_task.id());
+    KERNEL.get().scheduler.set_idle_task(idle_task.id());
     
     kprint("Scheduler ready");
 }
@@ -197,8 +205,8 @@ fn kernel_main() -> ! {
     loop {
         // Schedule next task
         unsafe {
-            if let Some(next_id) = KERNEL.scheduler.schedule() {
-                KERNEL.scheduler.set_current(next_id);
+            if let Some(next_id) = KERNEL.get().scheduler.schedule() {
+                KERNEL.get().scheduler.set_current(next_id);
                 // TODO: Context switch to next_id
             }
         }

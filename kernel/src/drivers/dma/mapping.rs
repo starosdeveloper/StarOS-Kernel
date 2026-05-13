@@ -6,7 +6,7 @@
 
 use crate::drivers::base::Device;
 use alloc::boxed::Box;
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::Ordering;
 
 /// DMA address type
 pub type DmaAddr = u64;
@@ -56,7 +56,7 @@ pub fn dma_alloc_coherent(dev: &Device, size: usize, dma_handle: &mut DmaAddr) -
 /// Allocate DMA memory with attributes
 ///
 /// Ported from: dma_alloc_attrs()
-pub fn dma_alloc_attrs(dev: &Device, size: usize, dma_handle: &mut DmaAddr, attrs: u64) -> *mut u8 {
+pub fn dma_alloc_attrs(_dev: &Device, size: usize, dma_handle: &mut DmaAddr, _attrs: u64) -> *mut u8 {
     if size == 0 {
         return core::ptr::null_mut();
     }
@@ -64,7 +64,8 @@ pub fn dma_alloc_attrs(dev: &Device, size: usize, dma_handle: &mut DmaAddr, attr
     // Align size to page boundary
     let aligned_size = (size + 4095) & !4095;
 
-    // Allocate memory (simplified - in real implementation would use allocator)
+    // SAFETY: Layout is valid - aligned_size is page-aligned (>0) and alignment is 4096 (power of 2).
+    // alloc_zeroed returns null on failure which we check below.
     let vaddr = unsafe {
         alloc::alloc::alloc_zeroed(
             alloc::alloc::Layout::from_size_align_unchecked(aligned_size, 4096)
@@ -91,13 +92,15 @@ pub fn dma_free_coherent(dev: &Device, size: usize, vaddr: *mut u8, dma_handle: 
 /// Free DMA memory with attributes
 ///
 /// Ported from: dma_free_attrs()
-pub fn dma_free_attrs(dev: &Device, size: usize, vaddr: *mut u8, dma_handle: DmaAddr, attrs: u64) {
+pub fn dma_free_attrs(_dev: &Device, size: usize, vaddr: *mut u8, _dma_handle: DmaAddr, _attrs: u64) {
     if vaddr.is_null() {
         return;
     }
 
     let aligned_size = (size + 4095) & !4095;
 
+    // SAFETY: vaddr was allocated by dma_alloc_attrs with the same layout (aligned_size, 4096).
+    // Null check above ensures vaddr is valid. Caller guarantees no active DMA operations.
     unsafe {
         alloc::alloc::dealloc(
             vaddr,
@@ -120,8 +123,8 @@ pub fn dma_map_single_attrs(
     dev: &Device,
     ptr: *mut u8,
     size: usize,
-    dir: DmaDataDirection,
-    attrs: u64,
+    _dir: DmaDataDirection,
+    _attrs: u64,
 ) -> DmaAddr {
     if ptr.is_null() || size == 0 {
         return 0;
@@ -152,10 +155,10 @@ pub fn dma_unmap_single(dev: &Device, addr: DmaAddr, size: usize, dir: DmaDataDi
 /// Ported from: dma_unmap_single_attrs()
 pub fn dma_unmap_single_attrs(
     dev: &Device,
-    addr: DmaAddr,
-    size: usize,
-    dir: DmaDataDirection,
-    attrs: u64,
+    _addr: DmaAddr,
+    _size: usize,
+    _dir: DmaDataDirection,
+    _attrs: u64,
 ) {
     if dev.has_iommu() {
         // IOMMU path: unmap IOVA
@@ -168,17 +171,19 @@ pub fn dma_unmap_single_attrs(
 /// Sync single buffer for CPU
 ///
 /// Ported from: dma_sync_single_for_cpu()
-pub fn dma_sync_single_for_cpu(dev: &Device, addr: DmaAddr, size: usize, dir: DmaDataDirection) {
+pub fn dma_sync_single_for_cpu(dev: &Device, addr: DmaAddr, size: usize, _dir: DmaDataDirection) {
     // Memory barrier: ensure DMA writes are visible to CPU
     #[cfg(target_arch = "aarch64")]
+    // SAFETY: DMB SY is a memory barrier instruction with no side effects
+    // other than ordering memory operations. Always safe to execute.
     unsafe {
-        // ARM64: Data Memory Barrier - wait for all memory operations
         core::arch::asm!("dmb sy", options(nostack, preserves_flags));
     }
     
     #[cfg(target_arch = "x86_64")]
+    // SAFETY: MFENCE is a memory fence with no side effects other than
+    // ordering memory operations. Always safe to execute.
     unsafe {
-        // x86: Memory fence
         core::arch::asm!("mfence", options(nostack, preserves_flags));
     }
     
@@ -192,7 +197,7 @@ pub fn dma_sync_single_for_cpu(dev: &Device, addr: DmaAddr, size: usize, dir: Dm
 /// Sync single buffer for device
 ///
 /// Ported from: dma_sync_single_for_device()
-pub fn dma_sync_single_for_device(dev: &Device, addr: DmaAddr, size: usize, dir: DmaDataDirection) {
+pub fn dma_sync_single_for_device(dev: &Device, addr: DmaAddr, size: usize, _dir: DmaDataDirection) {
     // Cache flush for non-coherent devices
     if !dev.is_dma_coherent() {
         // Flush dirty cache lines to RAM
@@ -201,14 +206,16 @@ pub fn dma_sync_single_for_device(dev: &Device, addr: DmaAddr, size: usize, dir:
     
     // Memory barrier: ensure CPU writes reach RAM before DMA starts
     #[cfg(target_arch = "aarch64")]
+    // SAFETY: DSB SY is a data synchronization barrier. No side effects
+    // other than ensuring all prior memory operations complete before proceeding.
     unsafe {
-        // ARM64: Data Synchronization Barrier - complete all memory operations
         core::arch::asm!("dsb sy", options(nostack, preserves_flags));
     }
     
     #[cfg(target_arch = "x86_64")]
+    // SAFETY: SFENCE is a store fence. No side effects other than
+    // ensuring all prior stores are globally visible.
     unsafe {
-        // x86: Store fence
         core::arch::asm!("sfence", options(nostack, preserves_flags));
     }
 }
@@ -222,6 +229,9 @@ fn arch_invalidate_cache_range(addr: DmaAddr, size: usize) {
     
     let mut line = start & !(cache_line_size - 1);
     while line < end {
+        // SAFETY: DC IVAC invalidates a cache line by virtual address.
+        // The address `line` is within the DMA buffer range [addr, addr+size)
+        // which the caller guarantees is valid mapped memory.
         unsafe {
             core::arch::asm!(
                 "dc ivac, {0}",
@@ -242,6 +252,9 @@ fn arch_flush_cache_range(addr: DmaAddr, size: usize) {
     
     let mut line = start & !(cache_line_size - 1);
     while line < end {
+        // SAFETY: DC CVAC cleans a cache line by virtual address (writes back to RAM).
+        // The address `line` is within the DMA buffer range [addr, addr+size)
+        // which the caller guarantees is valid mapped memory.
         unsafe {
             core::arch::asm!(
                 "dc cvac, {0}",

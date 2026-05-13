@@ -18,12 +18,12 @@
 //!   +0x30: IRQ_STATUS  — bit0=QMI rx, bit1=AT rx, bit2=state change
 //!   +0x34: IRQ_MASK    — interrupt enable mask
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::AtomicU32;
 use spin::Mutex;
 use crate::error::KernelError;
-use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};
+use crate::drivers::clk::mmio::{read_reg, write_reg};
 use super::wwan_dev::{WwanOps, WwanDev, SignalInfo, OperatorInfo, RadioTech};
-use super::qmi::{QmiMsg, QMI_NAS, QMI_WDS, nas_msg, wds_msg};
+use super::qmi::{QmiMsg, QMI_WDS, wds_msg};
 
 // ---------------------------------------------------------------------------
 // Constants

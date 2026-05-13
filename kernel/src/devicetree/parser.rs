@@ -9,6 +9,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
+const MAX_DT_DEPTH: usize = 32;
 const FDT_MAGIC: u32 = 0xd00dfeed;
 const FDT_BEGIN_NODE: u32 = 0x00000001;
 const FDT_END_NODE: u32 = 0x00000002;
@@ -79,6 +80,13 @@ impl FdtParser {
             return Err(KernelError::InvalidAddress);
         }
 
+        if (header.off_dt_struct as u64) + (header.size_dt_struct as u64) > header.totalsize as u64 {
+            return Err(KernelError::InvalidAddress);
+        }
+        if (header.off_dt_strings as u64) + (header.size_dt_strings as u64) > header.totalsize as u64 {
+            return Err(KernelError::InvalidAddress);
+        }
+
         Ok(header)
     }
 
@@ -108,6 +116,10 @@ impl FdtParser {
                     }
                     path.push_str(name);
                     depth += 1;
+
+                    if depth > MAX_DT_DEPTH {
+                        return Err(KernelError::InvalidAddress);
+                    }
 
                     if !callback(&path, struct_start + offset, depth)? {
                         return Ok(());

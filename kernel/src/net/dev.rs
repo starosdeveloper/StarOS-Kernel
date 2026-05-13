@@ -8,7 +8,6 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use alloc::string::String;
 use core::sync::atomic::{AtomicU32, AtomicU64, AtomicBool, Ordering};
 use core::ptr::NonNull;
 use spin::Mutex;

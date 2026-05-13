@@ -6,10 +6,9 @@
 //! Handles IPv4 packet processing, routing, and transmission.
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU16, Ordering};
 use crate::net::skbuff::SkBuff;
-use crate::net::dev::{NetDevice, DeviceHandle};
+use crate::net::dev::DeviceHandle;
 
 /// IPv4 version
 pub const IPVERSION: u8 = 4;
@@ -248,23 +247,31 @@ pub fn ip_select_ident() -> u16 {
 /// IPv4 input processing
 ///
 /// Ported from: `ip_rcv()`
-pub fn ip_rcv(skb: Box<SkBuff>, dev: &DeviceHandle) -> Result<(), IpError> {
-    // Get IP header
-    let iph = unsafe {
-        &*(skb.data_ptr() as *const IpHeader)
-    };
-    
-    // Sanity checks
+///
+/// # Security
+/// - Validates minimum packet length before header access
+/// - Validates IHL bounds to prevent out-of-bounds reads
+/// - Verifies checksum integrity
+/// - Checks TTL to prevent routing loops
+pub fn ip_rcv(skb: Box<SkBuff>, _dev: &DeviceHandle) -> Result<(), IpError> {
+    // Minimum length check BEFORE accessing header
     if skb.len < MIN_IP_HEADER_LEN as u32 {
         return Err(IpError::TooShort);
     }
+    
+    // SAFETY: We verified skb.len >= MIN_IP_HEADER_LEN (20 bytes) above.
+    // data_ptr() returns a valid pointer within the skb data buffer.
+    // IpHeader is repr(C, packed) and exactly 20 bytes.
+    let iph = unsafe {
+        &*(skb.data_ptr() as *const IpHeader)
+    };
     
     if iph.version() != IPVERSION {
         return Err(IpError::BadVersion);
     }
     
     let ihl = iph.ihl();
-    if ihl < MIN_IP_HEADER_LEN {
+    if ihl < MIN_IP_HEADER_LEN || ihl > MAX_IP_HEADER_LEN {
         return Err(IpError::BadHeaderLen);
     }
     
@@ -278,13 +285,8 @@ pub fn ip_rcv(skb: Box<SkBuff>, dev: &DeviceHandle) -> Result<(), IpError> {
     }
     
     let tot_len = iph.tot_len() as u32;
-    if skb.len < tot_len || tot_len < ihl as u32 {
+    if tot_len < ihl as u32 || skb.len < tot_len {
         return Err(IpError::BadLength);
-    }
-    
-    // Trim padding
-    if skb.len > tot_len {
-        // Would call skb_trim here
     }
     
     // Check TTL
@@ -348,7 +350,7 @@ fn ip_local_deliver_finish(mut skb: Box<SkBuff>) -> Result<(), IpError> {
 /// Handle IP fragmentation
 ///
 /// Ported from: `ip_defrag()`
-fn ip_defrag(skb: Box<SkBuff>) -> Result<(), IpError> {
+fn ip_defrag(_skb: Box<SkBuff>) -> Result<(), IpError> {
     // Simplified: drop fragments for now
     // Full implementation would reassemble fragments
     Err(IpError::FragmentationNotSupported)

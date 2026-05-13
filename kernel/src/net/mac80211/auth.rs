@@ -11,13 +11,8 @@
 //! - EAPOL frame parsing/building
 //! - CCMP key installation plumbing
 
-use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
-#[cfg(not(test))]
-use super::core::{Ieee80211Hw, Ieee80211Vif, Ieee80211Key, KeyCmd};
-#[cfg(not(test))]
-use super::sta::{StaInfo, StaState, sta_flags};
 
 // ---------------------------------------------------------------------------
 // Constants

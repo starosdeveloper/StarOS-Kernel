@@ -104,13 +104,20 @@ impl DmaPool {
                 continue;
             }
 
+            // SAFETY: page.vaddr is a valid DMA allocation of `self.allocation` bytes.
+            // `offset` is bounded by `self.allocation` (loop condition), so
+            // page.vaddr.add(offset) is within the allocated region.
+            // The block is properly aligned (size is aligned in new()).
             let block = unsafe { (page.vaddr.add(offset)) as *mut DmaBlock };
+            // SAFETY: block points to valid memory within the DMA page.
+            // We're initializing the block's fields before linking it into the free list.
             unsafe {
                 (*block).dma = page.dma + offset as u64;
                 (*block).next_block = None;
             }
 
             if let Some(last_ptr) = last {
+                // SAFETY: last_ptr was set from a valid block pointer in a previous iteration.
                 unsafe { (*last_ptr).next_block = Some(block); }
             } else {
                 first = Some(block);
@@ -124,6 +131,8 @@ impl DmaPool {
         // Link to existing free list
         if let Some(last_ptr) = last {
             let mut next = self.next_block.lock();
+            // SAFETY: last_ptr is valid (set in loop above). We're linking the
+            // new chain's tail to the existing free list head.
             unsafe { (*last_ptr).next_block = *next; }
             *next = first;
         }

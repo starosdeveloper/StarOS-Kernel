@@ -9,7 +9,6 @@ use crate::drivers::traits::{DeviceId, DeviceCapabilities, BasicDevice, DeviceRe
 use crate::prelude::*;
 use crate::drivers::driver_manager::{ExtendedDeviceId, global_driver_manager};
 use crate::drivers::registry::{DeviceHandle, global_registry};
-use crate::drivers::bus::BusType;
 use crate::devicetree::parser::FdtParser;
 use spin::RwLock;
 
@@ -24,7 +23,7 @@ pub struct DtDevice {
 }
 
 impl DtDevice {
-    pub fn from_dt_node(parser: &FdtParser, node_offset: usize) -> DeviceResult<Self> {
+    pub fn from_dt_node(_parser: &FdtParser, node_offset: usize) -> DeviceResult<Self> {
         // Simplified version - just create a basic device
         // Full DT parsing will be in Phase II
         

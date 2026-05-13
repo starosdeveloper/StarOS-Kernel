@@ -22,6 +22,7 @@ use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 /// xHCI register offsets
 const XHCI_MAX_HALT_USEC: u64 = 16000;
 const XHCI_CMD_DEFAULT_TIMEOUT: u32 = 5000;
+const MAX_SLOTS: u8 = 255; // DCBAA supports slots 1..=255 (index 0 is scratchpad)
 
 /// xHCI operational register bits
 const CMD_RUN: u32 = 1 << 0;
@@ -186,6 +187,12 @@ impl XhciRing {
     pub fn enqueue_trb(&mut self, trb: Trb) -> Result<(), i32> {
         if self.num_trbs_free == 0 {
             return Err(-28); // -ENOSPC
+        }
+
+        let trbs_per_seg = self.first_seg.trbs.len();
+        let total_trbs = self.num_segs as usize * trbs_per_seg;
+        if total_trbs == 0 || self.enqueue >= total_trbs {
+            return Err(-28); // -ENOSPC: ring full or index out of bounds
         }
 
         let mut trb_with_cycle = trb;
@@ -366,11 +373,22 @@ impl XhciHcd {
         let vector = &self.msix_vectors[vector_num as usize];
         
         unsafe {
-            // Read interrupt pending bit
+            // Spurious IRQ detection: check if interrupt pending bit is actually set
             let iman = (*vector.intr_regs).iman.load(Ordering::Acquire);
             if (iman & 0x01) == 0 {
-                // Not our interrupt
+                // No interrupt pending - spurious IRQ
                 return false;
+            }
+
+            // Also check controller-level USBSTS EINT bit for spurious detection
+            if let Some(op_regs) = self.op_regs {
+                let usbsts = (*op_regs).usbsts.load(Ordering::Acquire);
+                if (usbsts & (1 << 3)) == 0 {
+                    // EINT (Event Interrupt) not set - spurious
+                    return false;
+                }
+                // Clear EINT by writing 1 to it (W1C)
+                (*op_regs).usbsts.store(1 << 3, Ordering::Release);
             }
 
             // Clear interrupt pending
@@ -505,6 +523,9 @@ impl XhciHcd {
     ///
     /// Ported from: xhci_ring_ep_doorbell()
     pub fn ring_doorbell(&self, slot_id: u8, endpoint: u8, stream_id: u16) {
+        if slot_id > MAX_SLOTS {
+            return;
+        }
         if let Some(doorbell_base) = self.doorbell_base {
             unsafe {
                 let doorbell_ptr = doorbell_base.add(slot_id as usize);
@@ -524,7 +545,7 @@ impl XhciHcd {
     ///
     /// Ported from: xhci_alloc_virt_device()
     pub fn alloc_device_context(&mut self, slot_id: u8) -> Result<DmaAddr, i32> {
-        if slot_id == 0 || slot_id > self.max_slots {
+        if slot_id == 0 || slot_id > self.max_slots || slot_id > MAX_SLOTS {
             return Err(-22); // -EINVAL
         }
 

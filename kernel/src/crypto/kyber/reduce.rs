@@ -11,34 +11,50 @@ use super::params::{KYBER_Q, QINV};
 /// Computes a * R^(-1) mod q where R = 2^16
 /// Input: -q*2^15 <= a < q*2^15
 /// Output: -q < r < q with r ≡ a*R^(-1) (mod q)
+///
+/// # Constant-Time Guarantee
+/// Uses only arithmetic operations (multiply, shift, subtract).
+/// No branches or secret-dependent memory access.
 #[inline(always)]
 pub fn montgomery_reduce(a: i32) -> i16 {
-    let t = (a as i64 * QINV as i64) as i16;
-    let t = (a - t as i32 * KYBER_Q as i32) >> 16;
-    t as i16
+    // t = a * QINV mod 2^16 (low 16 bits of product)
+    let t = (a.wrapping_mul(QINV)) as i16;
+    // r = (a - t*q) / 2^16
+    let r = (a - (t as i32).wrapping_mul(KYBER_Q as i32)) >> 16;
+    r as i16
 }
 
 /// Barrett reduction
 /// 
-/// Computes a mod q
+/// Computes a mod q in constant time
 /// Input: -2^15 <= a < 2^15
-/// Output: 0 <= r < q with r ≡ a (mod q)
+/// Output: 0 <= r < 2q with r ≡ a (mod q)
+///
+/// # Constant-Time Guarantee
+/// Uses only multiply, add, shift, subtract. No branches.
 #[inline(always)]
 pub fn barrett_reduce(a: i16) -> i16 {
-    let v = ((1 << 26) + KYBER_Q as i32 / 2) / KYBER_Q as i32;
-    let t = (v * a as i32 + (1 << 25)) >> 26;
-    let t = a - (t * KYBER_Q as i32) as i16;
-    t
+    // v = round(2^26 / q)
+    const V: i32 = 20159; // ((1 << 26) + KYBER_Q/2) / KYBER_Q
+    let t = (V * a as i32 + (1 << 25)) >> 26;
+    (a as i32 - t * KYBER_Q as i32) as i16
 }
 
-/// Conditional subtraction of q
+/// Conditional subtraction of q (constant-time)
 /// 
-/// Returns a - q if a >= q, else a
+/// Returns a - q if a >= q, else a.
+/// Uses arithmetic masking instead of branching.
+///
+/// # Constant-Time Guarantee
+/// The mask is computed via arithmetic shift which is data-independent timing.
 #[inline(always)]
 pub fn csubq(a: i16) -> i16 {
-    let a = a - KYBER_Q;
-    let a = a + ((a >> 15) & KYBER_Q);
-    a
+    let mut r = a.wrapping_sub(KYBER_Q);
+    // If r < 0, mask = 0xFFFF (all ones), else mask = 0
+    // Arithmetic right shift propagates sign bit
+    let mask = (r >> 15) & KYBER_Q;
+    r = r.wrapping_add(mask);
+    r
 }
 
 /// Freeze: reduce to [0, q-1]

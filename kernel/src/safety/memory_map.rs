@@ -246,8 +246,18 @@ impl MemoryMap {
     }
 
     pub fn validate_region(&self, addr: PhysAddr, size: usize) -> Result<()> {
+        if size == 0 {
+            return Err(KernelError::InvalidAddress);
+        }
+
+        // Overflow check: ensure base + size does not wrap around
         let end_addr = addr.0.checked_add(size as u64)
             .ok_or(KernelError::InvalidAddress)?;
+
+        // Additional sanity: end must be greater than start (catches size=0 edge after cast)
+        if end_addr <= addr.0 {
+            return Err(KernelError::InvalidAddress);
+        }
 
         let mut current = addr.0;
         while current < end_addr {

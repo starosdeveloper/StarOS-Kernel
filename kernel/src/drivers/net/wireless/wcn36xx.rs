@@ -8,11 +8,10 @@
 //! The chip connects via a virtual bus (WCNSS) on Qualcomm SoCs.
 //! MMIO is accessed through `crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg}`.
 
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
 use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};
-use super::{WirelessDev, WirelessOps, ScanResult, ConnectReq, Band, Channel, MAX_SCAN_RESULTS};
+use super::{WirelessDev, WirelessOps, ScanResult, ConnectReq, Band, Channel};
 
 // ---------------------------------------------------------------------------
 // MMIO register map  (WCN3620 base = 0x03204000, offsets below)
@@ -122,18 +121,33 @@ pub fn alloc_hw(base: u64) -> Result<u8, KernelError> {
 /// Read from a chip register (hw_idx chooses the base address).
 /// The base address is copied out of the lock before the MMIO read.
 fn chip_read(hw_idx: u8, offset: u64) -> u32 {
-    let base = WCN36XX_TABLE.lock()[hw_idx as usize].base;  // <-- lock released here
+    let tbl = WCN36XX_TABLE.lock();
+    let idx = hw_idx as usize;
+    if idx >= tbl.len() { return 0; }
+    let base = tbl[idx].base;
+    drop(tbl);
+    if base == 0 { return 0; }
     read_reg(base + offset)
 }
 
 fn chip_write(hw_idx: u8, offset: u64, val: u32) {
-    let base = WCN36XX_TABLE.lock()[hw_idx as usize].base;
+    let tbl = WCN36XX_TABLE.lock();
+    let idx = hw_idx as usize;
+    if idx >= tbl.len() { return; }
+    let base = tbl[idx].base;
+    drop(tbl);
+    if base == 0 { return; }
     write_reg(base + offset, val);
 }
 
 fn chip_rmw(hw_idx: u8, offset: u64, mask: u32, val: u32) {
-    let base = WCN36XX_TABLE.lock()[hw_idx as usize].base;
-    rmw_reg(base + offset, mask, val);   // IRQ-safe RMW inside rmw_reg
+    let tbl = WCN36XX_TABLE.lock();
+    let idx = hw_idx as usize;
+    if idx >= tbl.len() { return; }
+    let base = tbl[idx].base;
+    drop(tbl);
+    if base == 0 { return; }
+    rmw_reg(base + offset, mask, val);
 }
 
 // ---------------------------------------------------------------------------

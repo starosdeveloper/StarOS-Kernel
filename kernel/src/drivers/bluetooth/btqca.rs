@@ -13,10 +13,9 @@
 //! On Snapdragon SoCs the chip is typically accessed over UART with
 //! the 3-wire (UART with RTS/CTS) or IBS (In-Band Sleep) protocol.
 
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
-use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};
+use crate::drivers::clk::mmio::{read_reg, write_reg};
 use crate::net::bluetooth::hci::{HciDev, HciTransport, hci_register_dev};
 
 // ---------------------------------------------------------------------------
@@ -210,7 +209,7 @@ pub static BTQCA_TRANSPORT: HciTransport = HciTransport {
 /// Probe and register a QCA Bluetooth controller.
 pub fn btqca_probe(base: u64, baud: u32, mac: [u8; 6]) -> Result<u8, KernelError> {
     let hw_idx = alloc_hw(base, baud)?;
-    let mut dev = HciDev::new(hw_idx);
+    let dev = HciDev::new(hw_idx);
     // Set MAC (BD_ADDR) — will be confirmed by READ_BD_ADDR event
     *dev.bdaddr.lock() = mac;
     // Attach transport

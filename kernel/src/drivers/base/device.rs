@@ -158,6 +158,18 @@ pub fn device_add(dev: *mut DeviceCore) -> Result<()> {
 /// if it returned an error! Always use put_device() to give up the
 /// reference initialized in this function instead.
 pub fn device_register(dev: *mut DeviceCore) -> Result<()> {
+    if dev.is_null() {
+        return Err(DeviceError::InvalidDevice);
+    }
+
+    // SAFETY: dev is non-null (checked above), caller guarantees validity
+    unsafe {
+        let name = &(*dev).name;
+        if name.is_empty() || name.len() > 64 {
+            return Err(DeviceError::InvalidDevice);
+        }
+    }
+
     device_initialize(dev);
     device_add(dev)
 }
@@ -268,7 +280,7 @@ fn device_release(dev: *mut DeviceCore) {
 ///
 /// Iterate over @parent's child devices, and call @fn for each,
 /// passing it the child device.
-pub fn device_for_each_child<F>(parent: *mut DeviceCore, mut f: F) -> Result<()>
+pub fn device_for_each_child<F>(parent: *mut DeviceCore, f: F) -> Result<()>
 where
     F: FnMut(*mut DeviceCore) -> Result<()>,
 {

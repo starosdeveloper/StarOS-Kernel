@@ -7,7 +7,6 @@
  */
 
 use crate::prelude::*;
-use core::ptr;
 
 /// Device node structure
 #[derive(Debug, Clone)]
@@ -42,17 +41,17 @@ impl DeviceNode {
         }
     }
 
-    pub fn add_property(&mut self, prop: Property) {
+    pub fn add_property(&mut self, _prop: Property) {
         // Add property to linked list
         // Simplified - would need proper implementation
     }
 
-    pub fn add_child(&mut self, child: DeviceNode) {
+    pub fn add_child(&mut self, _child: DeviceNode) {
         // Add child to linked list
         // Simplified - would need proper implementation
     }
 
-    pub fn get_property(&self, name: &str) -> Option<&Property> {
+    pub fn get_property(&self, _name: &str) -> Option<&Property> {
         // Find property by name
         // Simplified - would need proper implementation
         None
@@ -288,7 +287,7 @@ pub fn of_get_child_by_name<'a>(node: Option<&'a DeviceNode>, name: &str) -> Opt
 /// @path: Full path to node (e.g., "/soc/uart@fe001000")
 ///
 /// Returns node if found, None otherwise.
-pub fn of_find_node_by_path(path: &str) -> Option<&'static DeviceNode> {
+pub fn of_find_node_by_path(_path: &str) -> Option<&'static DeviceNode> {
     // This would need access to global of_root
     // Simplified implementation
     None
@@ -339,8 +338,8 @@ fn __of_find_node_by_path<'a>(
 ///
 /// Returns node if found, None otherwise.
 pub fn of_find_node_by_name<'a>(
-    from: Option<&'a DeviceNode>,
-    name: &str,
+    _from: Option<&'a DeviceNode>,
+    _name: &str,
 ) -> Option<&'a DeviceNode> {
     // Traverse tree looking for matching name
     // Simplified - would need full tree traversal
@@ -354,9 +353,9 @@ pub fn of_find_node_by_name<'a>(
 ///
 /// Returns node if found, None otherwise.
 pub fn of_find_compatible_node<'a>(
-    from: Option<&'a DeviceNode>,
-    type_: Option<&str>,
-    compatible: &str,
+    _from: Option<&'a DeviceNode>,
+    _type_: Option<&str>,
+    _compatible: &str,
 ) -> Option<&'a DeviceNode> {
     // Traverse tree looking for compatible match
     // Simplified - would need full tree traversal

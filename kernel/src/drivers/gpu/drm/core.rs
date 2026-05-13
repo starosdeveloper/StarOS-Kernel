@@ -15,7 +15,6 @@
 
 use spin::Mutex;
 use crate::error::KernelError;
-use crate::drivers::clk::mmio::{read_reg, write_reg};
 
 // ---------------------------------------------------------------------------
 // Constants

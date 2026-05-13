@@ -1,7 +1,6 @@
 use crate::error::{KernelError, Result};
 use crate::devicetree::parser::FdtParser;
-use crate::devicetree::properties::{parse_reg, parse_string};
-use crate::prelude::*;
+use crate::devicetree::properties::parse_reg;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 static PMIC_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -156,6 +155,11 @@ impl PmicDriver {
     pub fn set_voltage(&self, rail: &str, voltage_mv: u32) -> Result<()> {
         if !PMIC_INITIALIZED.load(Ordering::Acquire) {
             return Err(KernelError::NotInitialized);
+        }
+
+        // Reject voltages outside safe hardware range to prevent damage
+        if voltage_mv < 500 || voltage_mv > 5000 {
+            return Err(KernelError::InvalidAddress);
         }
 
         let rail_offset = self.get_rail_offset(rail)?;

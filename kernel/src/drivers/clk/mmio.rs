@@ -3,7 +3,6 @@
 //!
 //! Prevents Read-Modify-Write races when multiple clocks share the same register.
 
-use spin::Mutex;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Global lock for clock MMIO operations.

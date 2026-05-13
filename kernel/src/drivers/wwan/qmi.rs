@@ -314,7 +314,8 @@ pub fn qmi_encode_tlv(msg: &mut QmiMsg, buf: &mut [u8; QMI_MAX_FRAME_LEN]) -> Re
     let mut tlv_pos: usize = 0;
     for i in 0..msg.tlv_count as usize {
         let t = &msg.tlvs[i];
-        if tlv_pos + 3 + t.len as usize > QMI_MAX_TLV_LEN {
+        let needed = 3 + t.len as usize;
+        if needed > QMI_MAX_TLV_LEN.saturating_sub(tlv_pos) {
             return Err(KernelError::InvalidParameter(""));
         }
         tlv_buf[tlv_pos] = t.tlv_type;
@@ -385,12 +386,17 @@ pub fn qmi_decode_tlv(raw: &[u8]) -> Result<QmiMsg, KernelError> {
     msg.ctrl_flags = ctrl_flags;
     msg.txn_id = txn_id;
 
-    let end = (tlv_pos + tlv_len).min(raw.len());
+    if tlv_pos + tlv_len > raw.len() {
+        return Err(KernelError::InvalidParameter(""));
+    }
+    let end = tlv_pos + tlv_len;
     while tlv_pos + 3 <= end {
         let t_type = raw[tlv_pos];
         let t_len  = u16::from_le_bytes([raw[tlv_pos + 1], raw[tlv_pos + 2]]) as usize;
         tlv_pos += 3;
-        if tlv_pos + t_len > end { break; }
+        if t_len > end.saturating_sub(tlv_pos) {
+            return Err(KernelError::InvalidParameter(""));
+        }
         let _ = msg.add_tlv(t_type, &raw[tlv_pos..tlv_pos + t_len]);
         tlv_pos += t_len;
     }

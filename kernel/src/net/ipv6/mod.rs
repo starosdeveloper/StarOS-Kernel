@@ -6,10 +6,9 @@
 //! Handles IPv6 packet processing, routing, and transmission.
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 use crate::net::skbuff::SkBuff;
-use crate::net::dev::{NetDevice, DeviceHandle};
+use crate::net::dev::DeviceHandle;
 use crate::net::ipv4::ip_protocol;
 
 /// IPv6 version
@@ -272,16 +271,23 @@ pub fn ipv6_flow_label() -> u32 {
 /// IPv6 input processing
 ///
 /// Ported from: `ipv6_rcv()`
-pub fn ipv6_rcv(skb: Box<SkBuff>, dev: &DeviceHandle) -> Result<(), Ipv6Error> {
-    // Get IPv6 header
-    let ip6h = unsafe {
-        &*(skb.data_ptr() as *const Ipv6Header)
-    };
-    
-    // Sanity checks
+///
+/// # Security
+/// - Validates minimum packet length before header access
+/// - Verifies version field
+/// - Checks payload length against actual buffer
+/// - Validates hop limit
+pub fn ipv6_rcv(skb: Box<SkBuff>, _dev: &DeviceHandle) -> Result<(), Ipv6Error> {
+    // Length check BEFORE accessing header
     if skb.len < IPV6_HEADER_LEN as u32 {
         return Err(Ipv6Error::TooShort);
     }
+    
+    // SAFETY: We verified skb.len >= IPV6_HEADER_LEN (40 bytes) above.
+    // data_ptr() returns a valid pointer within the skb data buffer.
+    let ip6h = unsafe {
+        &*(skb.data_ptr() as *const Ipv6Header)
+    };
     
     if ip6h.version() != IPV6VERSION {
         return Err(Ipv6Error::BadVersion);
@@ -305,6 +311,8 @@ pub fn ipv6_rcv(skb: Box<SkBuff>, dev: &DeviceHandle) -> Result<(), Ipv6Error> {
 ///
 /// Ported from: `ip6_input()`
 fn ipv6_local_deliver(skb: Box<SkBuff>) -> Result<(), Ipv6Error> {
+    // SAFETY: Caller (ipv6_rcv) already validated skb.len >= IPV6_HEADER_LEN.
+    // data_ptr() is valid and points to at least 40 bytes.
     let ip6h = unsafe {
         &*(skb.data_ptr() as *const Ipv6Header)
     };

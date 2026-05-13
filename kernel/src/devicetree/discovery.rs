@@ -1,4 +1,3 @@
-use crate::error::{KernelError, Result};
 use crate::prelude::*;
 use super::parser::FdtParser;
 use super::properties::{parse_reg, parse_u32, parse_string, parse_stringlist};

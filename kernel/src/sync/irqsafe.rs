@@ -19,14 +19,14 @@ impl<T> IrqSafeMutex<T> {
     }
 
     /// Lock with interrupts disabled (irqsave)
-    pub fn lock_irqsave(&self) -> IrqSafeGuard<T> {
+    pub fn lock_irqsave(&self) -> IrqSafeGuard<'_, T> {
         let flags = disable_interrupts();
         let guard = self.inner.lock();
         IrqSafeGuard { guard, flags }
     }
 
     /// Regular lock (for non-IRQ contexts)
-    pub fn lock(&self) -> spin::MutexGuard<T> {
+    pub fn lock(&self) -> spin::MutexGuard<'_, T> {
         self.inner.lock()
     }
 }

@@ -10,7 +10,6 @@ use crate::drivers::of::base::{DeviceNode, Property};
 use crate::devicetree::parser::FdtParser;
 use crate::prelude::*;
 use core::mem;
-use core::ptr;
 
 /// Maximum depth of device tree traversal
 const FDT_MAX_DEPTH: usize = 64;
@@ -272,7 +271,7 @@ fn unflatten_dt_nodes(
     }
 
     // Use walk_nodes which properly tracks depth via FDT tokens
-    let mut current_alloc = if let Some(a) = alloc {
+    let current_alloc = if let Some(a) = alloc {
         a
     } else {
         // Dry run - use dummy allocator with special marker

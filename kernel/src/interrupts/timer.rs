@@ -109,7 +109,7 @@ impl Timer {
 
     /// Handle timer interrupt (called from IRQ handler)
     pub fn tick(&self) {
-        let ticks = self.ticks.fetch_add(1, Ordering::Relaxed);
+        let _ticks = self.ticks.fetch_add(1, Ordering::Relaxed);
         
         // Set next interrupt
         let next = self.current() + (self.frequency / 100); // 10ms

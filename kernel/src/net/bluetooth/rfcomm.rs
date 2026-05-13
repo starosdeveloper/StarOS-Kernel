@@ -15,10 +15,9 @@
 //!   UIH   — Unnumbered Information with Header check (data)
 //!   UI    — Unnumbered Information (mux control)
 
-use core::sync::atomic::{AtomicU8, AtomicBool, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
-use super::l2cap::{l2cap_send, l2cap_register_psm, l2cap_chan_create};
+use super::l2cap::{l2cap_send, l2cap_register_psm};
 
 // ---------------------------------------------------------------------------
 // RFCOMM PSM
@@ -200,9 +199,15 @@ fn rfcomm_l2cap_recv(_hcon: u16, scid: u16, data: &[u8]) {
 ///
 /// Frame layout: addr(1) + ctrl(1) + len(1 or 2) + data + fcs(1)
 ///
+/// # Security
+/// - Validates minimum frame size
+/// - Verifies FCS (CRC-8) integrity
+/// - Rejects frames with truncated payload
+/// - Validates DLCI range (0..61)
+///
 /// Ported from: `rfcomm_recv_frame()`
 pub fn rfcomm_recv_frame(scid: u16, data: &[u8]) {
-    if data.len() < 3 { return; }
+    if data.len() < 4 { return; } // minimum: addr + ctrl + len + fcs
     let addr = data[0];
     let ctrl = data[1];
 
@@ -215,18 +220,28 @@ pub fn rfcomm_recv_frame(scid: u16, data: &[u8]) {
     };
 
     let dlci      = addr >> 2;
-    let cr_bit    = (addr >> 1) & 0x01;
-    let pf_bit    = (ctrl >> 4) & 0x01;
     let frame_type = ctrl & 0xEF;  // strip P/F bit
 
-    let payload = if data_off + len <= data.len().saturating_sub(1) {
-        &data[data_off..data_off + len]
+    // Validate DLCI range (0..61 per spec)
+    if dlci > 61 { return; }
+
+    // Verify FCS - frame must have at least data_off + len + 1 (fcs byte)
+    let total_needed = data_off + len + 1;
+    if data.len() < total_needed { return; }
+
+    // FCS verification: for UIH, FCS covers addr+ctrl only; for others, addr+ctrl+len
+    let expected_fcs = if frame_type == frame_type::UIH {
+        rfcomm_fcs(&data[..2])
     } else {
-        &[]
+        rfcomm_fcs(&data[..data_off])
     };
+    let received_fcs = data[data_off + len];
+    if received_fcs != expected_fcs { return; }
+
+    let payload = &data[data_off..data_off + len];
 
     match frame_type {
-        frame_type::SABM => rfcomm_recv_sabm(scid, dlci, cr_bit),
+        frame_type::SABM => rfcomm_recv_sabm(scid, dlci, (addr >> 1) & 0x01),
         frame_type::UA   => rfcomm_recv_ua(scid, dlci),
         frame_type::DISC => rfcomm_recv_disc(scid, dlci),
         frame_type::DM   => rfcomm_recv_dm(scid, dlci),
@@ -324,9 +339,10 @@ fn rfcomm_recv_data(scid: u16, dlci: u8, payload: &[u8]) {
 fn rfcomm_recv_mcc(scid: u16, data: &[u8]) {
     if data.len() < 2 { return; }
     let mcc_type = data[0] & !0x01;  // strip EA bit
-    let _cr_bit  = data[0] & 0x01;
     let mcc_len  = (data[1] >> 1) as usize;
-    let mcc_data = if data.len() >= 2 + mcc_len { &data[2..2 + mcc_len] } else { &data[2..] };
+    // Reject truncated MCC data
+    if data.len() < 2 + mcc_len { return; }
+    let mcc_data = &data[2..2 + mcc_len];
 
     match mcc_type {
         mcc_type::MSC  => { /* Modem Status — ignore for now */ }

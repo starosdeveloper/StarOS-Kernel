@@ -1,4 +1,4 @@
-use crate::error::{KernelError, Result};
+use crate::error::Result;
 use crate::devicetree::parser::FdtParser;
 use crate::devicetree::discovery::DeviceDiscovery;
 use crate::safety::{watchdog::Watchdog, memory_map::MemoryMap, panic, boot_validator::BootValidator};

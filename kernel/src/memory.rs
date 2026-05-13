@@ -5,6 +5,9 @@
 pub mod physical;
 pub mod virtual_mem;
 pub mod heap;
+pub mod tlb;
+pub mod iommu;
+pub mod kaslr;
 
 pub use physical::{PhysicalAllocator, PhysAddr, PAGE_SIZE};
 pub use virtual_mem::{VirtAddr, PageTable, PageTableEntry, Flags, VirtualMemory};

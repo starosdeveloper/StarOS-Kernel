@@ -173,8 +173,20 @@ impl Compositor {
     // -----------------------------------------------------------------------
 
     /// Add a surface and return its handle (index).
-    /// Returns `None` if the surface table is full.
+    /// Returns `None` if the surface table is full or dimensions are invalid.
     pub fn add_surface(&mut self, surface: Surface) -> Option<usize> {
+        const MAX_DIM: u32 = 8192;
+        // Validate dimensions: non-zero, within max, and no overflow.
+        if surface.width == 0 || surface.height == 0 {
+            return None;
+        }
+        if surface.width > MAX_DIM || surface.height > MAX_DIM {
+            return None;
+        }
+        if surface.width.checked_mul(surface.height).is_none() {
+            return None;
+        }
+
         for (i, slot) in self.surfaces.iter_mut().enumerate() {
             if slot.is_none() {
                 *slot = Some(surface);
@@ -252,6 +264,17 @@ impl Compositor {
     }
 
     fn paint_surface(&self, buf: &mut [u32], stride: u32, s: &Surface) {
+        // Bounds-check: skip surfaces entirely outside the framebuffer.
+        if s.x >= self.width || s.y >= self.height {
+            return;
+        }
+        // Ensure we never index beyond the buffer length.
+        let buf_len = buf.len() as u64;
+        let max_offset = (s.y + s.height).min(self.height) as u64 * stride as u64;
+        if max_offset > buf_len {
+            return;
+        }
+
         match s.pixels {
             None       => self.paint_solid(buf, stride, s),
             Some(pix)  => self.paint_pixels(buf, stride, s, pix),

@@ -18,7 +18,7 @@
 //! └──────────┴───────────┴────────────┴───────────────────────┘
 //! ```
 
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
 

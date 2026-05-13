@@ -181,7 +181,7 @@ impl DmaCookieTracker {
 /// DMA IRQ handler - called from interrupt context
 ///
 /// This should be called by DMA controller driver when transfer completes
-pub fn dma_irq_handler(chan: &DmaChannel, cookie: u32, tracker: &DmaCookieTracker) {
+pub fn dma_irq_handler(_chan: &DmaChannel, cookie: u32, tracker: &DmaCookieTracker) {
     // Mark transaction as complete
     tracker.mark_complete(cookie);
     
@@ -231,7 +231,7 @@ static NEXT_DEV_ID: AtomicU32 = AtomicU32::new(0);
 
 /// DMA channel with queue and cookie tracking
 impl DmaChannel {
-    pub fn new_with_queue(chan_id: u32, device: DmaDevice, name: &'static str, queue_size: usize) -> Self {
+    pub fn new_with_queue(chan_id: u32, device: DmaDevice, name: &'static str, _queue_size: usize) -> Self {
         Self {
             chan_id,
             device,

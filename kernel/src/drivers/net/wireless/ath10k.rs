@@ -9,11 +9,10 @@
 //! WMI (Wireless Management Interface) commands over HTC/HIF, and the
 //! firmware handles the 802.11 MAC layer internally.
 
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;
 use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};
-use super::{WirelessDev, WirelessOps, ScanResult, ConnectReq, Band, Channel, MAX_SCAN_RESULTS};
+use super::{WirelessDev, WirelessOps, ScanResult, ConnectReq, Band, Channel};
 
 // ---------------------------------------------------------------------------
 // PCIe register map  (QCA6174 base = 0x0006_0000 on embedded SoC)
@@ -108,19 +107,27 @@ pub fn alloc_hw(base: u64) -> Result<u8, KernelError> {
 // ---------------------------------------------------------------------------
 
 fn chip_base(hw_idx: u8) -> u64 {
-    ATH10K_TABLE.lock()[hw_idx as usize].base
+    let idx = hw_idx as usize;
+    if idx >= MAX_ATH10K { return 0; }
+    ATH10K_TABLE.lock()[idx].base
 }
 
 fn chip_read(hw_idx: u8, reg: u64) -> u32 {
-    read_reg(chip_base(hw_idx) + reg - ATH10K_BASE)
+    let base = chip_base(hw_idx);
+    if base == 0 { return 0; }
+    read_reg(base + reg - ATH10K_BASE)
 }
 
 fn chip_write(hw_idx: u8, reg: u64, val: u32) {
-    write_reg(chip_base(hw_idx) + reg - ATH10K_BASE, val);
+    let base = chip_base(hw_idx);
+    if base == 0 { return; }
+    write_reg(base + reg - ATH10K_BASE, val);
 }
 
 fn chip_rmw(hw_idx: u8, reg: u64, mask: u32, val: u32) {
-    rmw_reg(chip_base(hw_idx) + reg - ATH10K_BASE, mask, val);
+    let base = chip_base(hw_idx);
+    if base == 0 { return; }
+    rmw_reg(base + reg - ATH10K_BASE, mask, val);
 }
 
 // ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@
 //!   +0x40C: MDP5_DSI_ACTIVE_HCTL   — active H region
 //!   +0x410: MDP5_DSI_ACTIVE_VCTL   — active V region
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::AtomicU32;
 use spin::Mutex;
 use crate::error::KernelError;
 use crate::drivers::clk::mmio::{read_reg, write_reg, rmw_reg};

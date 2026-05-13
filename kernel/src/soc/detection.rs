@@ -1,4 +1,4 @@
-use crate::error::{KernelError, Result};
+use crate::error::Result;
 use crate::prelude::*;
 use crate::devicetree::parser::FdtParser;
 use crate::devicetree::properties::{parse_string, parse_stringlist};

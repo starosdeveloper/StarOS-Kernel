@@ -13,10 +13,8 @@
 use crate::prelude::*;
 use crate::drivers::resource::core::{Resource, IORESOURCE_MEM, IORESOURCE_IO, IORESOURCE_IRQ};
 use crate::drivers::resource::mmio::MmioRegion;
-use crate::drivers::base::bus::BusType;
 use crate::drivers::base::device::DeviceCore;
 use crate::drivers::base::driver::DriverCore;
-use crate::drivers::of::irq::of_irq_get;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use alloc::vec::Vec;
 use alloc::string::String;
@@ -171,6 +169,10 @@ pub fn platform_get_resource(
     res_type: u64,
     num: usize,
 ) -> Option<&Resource> {
+    if num >= dev.num_resources {
+        return None;
+    }
+
     let mut count = num;
     
     for i in 0..dev.num_resources {
@@ -672,7 +674,7 @@ pub fn platform_add_devices(devs: &mut [&mut PlatformDevice]) -> Result<()> {
 /// @drv: platform driver structure
 ///
 /// Register a driver for platform-level devices.
-pub fn platform_driver_register(drv: &mut PlatformDriver) -> Result<()> {
+pub fn platform_driver_register(_drv: &mut PlatformDriver) -> Result<()> {
     // In real implementation, would:
     // 1. Set driver.bus = &platform_bus_type
     // 2. Call driver_register(&drv->driver)
@@ -682,7 +684,7 @@ pub fn platform_driver_register(drv: &mut PlatformDriver) -> Result<()> {
 
 /// platform_driver_unregister - unregister a driver for platform-level devices
 /// @drv: platform driver structure
-pub fn platform_driver_unregister(drv: &mut PlatformDriver) {
+pub fn platform_driver_unregister(_drv: &mut PlatformDriver) {
     // In real implementation, would call driver_unregister(&drv->driver)
 }
 

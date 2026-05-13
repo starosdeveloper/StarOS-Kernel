@@ -7,7 +7,7 @@ use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 #[cfg(feature = "std")]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-use crate::error::{KernelError, ProcessError};
+use crate::error::KernelError;
 use super::task::TaskId;
 
 /// Message for IPC
@@ -46,6 +46,9 @@ pub struct MessageQueue {
 }
 
 impl MessageQueue {
+    /// Maximum message data size in bytes
+    pub const MAX_MESSAGE_SIZE: usize = 4096;
+
     pub const fn new() -> Self {
         Self {
             messages: [None; 32],
@@ -56,6 +59,11 @@ impl MessageQueue {
     }
 
     pub fn send(&mut self, msg: Message) -> Result<(), KernelError> {
+        // Reject messages exceeding maximum data size
+        if core::mem::size_of::<Message>() > Self::MAX_MESSAGE_SIZE {
+            return Err(KernelError::InvalidParameter("Message exceeds maximum size of 4096 bytes"));
+        }
+
         let count = self.count.load(Ordering::Acquire);
         if count >= 32 {
             return Err(KernelError::ResourceExhausted);
@@ -68,6 +76,25 @@ impl MessageQueue {
         self.count.fetch_add(1, Ordering::Release);
 
         Ok(())
+    }
+
+    /// Send raw data with size validation (max 4096 bytes)
+    pub fn send_data(&mut self, sender: TaskId, msg_type: u64, data: &[u8]) -> Result<(), KernelError> {
+        if data.len() > Self::MAX_MESSAGE_SIZE {
+            return Err(KernelError::InvalidParameter("Message data exceeds 4096 bytes"));
+        }
+
+        let mut msg = Message::new(sender, msg_type);
+        let copy_len = data.len().min(core::mem::size_of_val(&msg.data));
+        // SAFETY: copying user data into fixed message buffer within bounds
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                msg.data.as_mut_ptr() as *mut u8,
+                copy_len,
+            );
+        }
+        self.send(msg)
     }
 
     pub fn receive(&mut self) -> Option<Message> {
@@ -218,12 +245,18 @@ pub struct SharedMemory {
 }
 
 impl SharedMemory {
-    pub fn new(base: u64, size: usize) -> Self {
-        Self {
+    /// Maximum shared memory size (64MB)
+    pub const MAX_SIZE: usize = 64 * 1024 * 1024;
+
+    pub fn new(base: u64, size: usize) -> Result<Self, KernelError> {
+        if size > Self::MAX_SIZE {
+            return Err(KernelError::InvalidParameter("Shared memory exceeds 64MB limit"));
+        }
+        Ok(Self {
             base,
             size,
             ref_count: AtomicUsize::new(1),
-        }
+        })
     }
 
     pub fn base(&self) -> u64 {
@@ -335,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_shared_memory() {
-        let shm = SharedMemory::new(0x10000, 4096);
+        let shm = SharedMemory::new(0x10000, 4096).unwrap();
         
         assert_eq!(shm.ref_count(), 1);
         

@@ -17,7 +17,6 @@ use alloc::string::{String, ToString};
 use alloc::boxed::Box;
 use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use crate::sync::IrqSafeMutex;
-use crate::drivers::of::DeviceNode;
 
 /// SPI result type
 pub type Result<T> = core::result::Result<T, Error>;
@@ -115,6 +114,9 @@ impl SpiControllerFlags {
 /// Maximum chip selects
 pub const SPI_DEVICE_CS_CNT_MAX: usize = 4;
 
+/// Maximum SPI transfer size in bytes
+pub const SPI_MAX_TRANSFER_SIZE: usize = 65536;
+
 /// Global SPI controller registry
 static CONTROLLER_REGISTRY: IrqSafeMutex<Vec<Arc<SpiController>>> = IrqSafeMutex::new(Vec::new());
 static NEXT_BUS_NUM: AtomicU32 = AtomicU32::new(0);
@@ -139,23 +141,38 @@ pub struct SpiTransfer {
 }
 
 impl SpiTransfer {
+    /// Validate bits_per_word value
+    fn validate_bits_per_word(bpw: u8) -> Result<()> {
+        if bpw != 0 && bpw != 8 && bpw != 16 && bpw != 32 {
+            return Err(Error::InvalidArgument);
+        }
+        Ok(())
+    }
+
     /// Create new transfer
-    pub fn new(len: usize) -> Self {
-        Self {
+    pub fn new(len: usize, bits_per_word: u8) -> Result<Self> {
+        if len > SPI_MAX_TRANSFER_SIZE {
+            return Err(Error::InvalidArgument);
+        }
+        Self::validate_bits_per_word(bits_per_word)?;
+        Ok(Self {
             tx_buf: None,
             rx_buf: None,
             len,
             speed_hz: 0,
-            bits_per_word: 0,
+            bits_per_word,
             delay_usecs: 0,
             cs_change: false,
-        }
+        })
     }
 
     /// Create write transfer
-    pub fn write(data: Vec<u8>) -> Self {
+    pub fn write(data: Vec<u8>) -> Result<Self> {
+        if data.len() > SPI_MAX_TRANSFER_SIZE {
+            return Err(Error::InvalidArgument);
+        }
         let len = data.len();
-        Self {
+        Ok(Self {
             tx_buf: Some(data),
             rx_buf: None,
             len,
@@ -163,12 +180,15 @@ impl SpiTransfer {
             bits_per_word: 0,
             delay_usecs: 0,
             cs_change: false,
-        }
+        })
     }
 
     /// Create read transfer
-    pub fn read(len: usize) -> Self {
-        Self {
+    pub fn read(len: usize) -> Result<Self> {
+        if len > SPI_MAX_TRANSFER_SIZE {
+            return Err(Error::InvalidArgument);
+        }
+        Ok(Self {
             tx_buf: None,
             rx_buf: Some(vec![0u8; len]),
             len,
@@ -176,7 +196,7 @@ impl SpiTransfer {
             bits_per_word: 0,
             delay_usecs: 0,
             cs_change: false,
-        }
+        })
     }
 }
 
@@ -385,14 +405,14 @@ impl SpiDevice {
     /// Synchronous write
     pub fn write(&self, data: &[u8]) -> Result<()> {
         let mut msg = SpiMessage::new();
-        msg.add_transfer(SpiTransfer::write(data.to_vec()));
+        msg.add_transfer(SpiTransfer::write(data.to_vec())?);
         self.sync(&mut msg)
     }
 
     /// Synchronous read
     pub fn read(&self, buf: &mut [u8]) -> Result<()> {
         let mut msg = SpiMessage::new();
-        let mut transfer = SpiTransfer::read(buf.len());
+        let transfer = SpiTransfer::read(buf.len())?;
         msg.add_transfer(transfer.clone());
         self.sync(&mut msg)?;
         
@@ -591,11 +611,11 @@ pub fn spi_write_then_read(
     let mut msg = SpiMessage::new();
     
     if !txbuf.is_empty() {
-        msg.add_transfer(SpiTransfer::write(txbuf.to_vec()));
+        msg.add_transfer(SpiTransfer::write(txbuf.to_vec())?);
     }
     
     if !rxbuf.is_empty() {
-        msg.add_transfer(SpiTransfer::read(rxbuf.len()));
+        msg.add_transfer(SpiTransfer::read(rxbuf.len())?);
     }
     
     spi.sync(&mut msg)?;
@@ -689,7 +709,7 @@ mod tests {
 
     #[test]
     fn test_transfer_creation() {
-        let transfer = SpiTransfer::write(vec![1, 2, 3, 4]);
+        let transfer = SpiTransfer::write(vec![1, 2, 3, 4]).unwrap();
         assert_eq!(transfer.len, 4);
         assert!(transfer.tx_buf.is_some());
         assert!(transfer.rx_buf.is_none());
@@ -698,7 +718,7 @@ mod tests {
     #[test]
     fn test_message_creation() {
         let mut msg = SpiMessage::new();
-        msg.add_transfer(SpiTransfer::write(vec![1, 2, 3]));
+        msg.add_transfer(SpiTransfer::write(vec![1, 2, 3]).unwrap());
         assert_eq!(msg.transfers.len(), 1);
     }
 }
