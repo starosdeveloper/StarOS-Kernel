@@ -95,6 +95,7 @@ pub mod input;
 pub mod ipc;
 pub mod memory;
 pub mod system;
+pub mod tunnel;
 
 // Re-export commonly used types
 pub use types::*;

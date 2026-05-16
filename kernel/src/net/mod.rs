@@ -30,6 +30,8 @@ pub mod ipv4;
 pub mod ipv6;
 pub mod mac80211;
 pub mod bluetooth;
+pub mod vless;
+pub mod xray;
 
 #[cfg(not(test))]
 pub use skbuff::{SkBuff, SkBuffError, ChecksumType, PacketType};

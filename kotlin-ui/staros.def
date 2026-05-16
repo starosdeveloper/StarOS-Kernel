@@ -1,0 +1,33 @@
+headers = staros_ffi.h
+package = com.staros.kernel
+libraryPaths = /system/lib64
+staticLibraries = libstaros_kernel.a
+
+---
+
+// STAR OS Kernel FFI - Kotlin/Native interop
+// Auto-generated from kernel/src/ffi/
+
+typedef struct {
+    unsigned long long bytes_tx;
+    unsigned long long bytes_rx;
+    unsigned long long packets_tx;
+    unsigned long long packets_rx;
+} TunnelStats;
+
+int staros_tunnel_configure(const char* server_addr, unsigned long server_addr_len, unsigned short port, const char* uuid, unsigned long uuid_len, unsigned char transport, const char* sni, unsigned long sni_len);
+int staros_tunnel_start(void);
+void staros_tunnel_stop(void);
+unsigned char staros_tunnel_state(void);
+int staros_tunnel_is_active(void);
+int staros_tunnel_get_stats(TunnelStats* out);
+
+unsigned int staros_ffi_get_version(void);
+int staros_ffi_init(void);
+int staros_ffi_shutdown(void);
+
+void* staros_memory_alloc(unsigned long size, unsigned long align);
+void staros_memory_free(void* ptr, unsigned long size, unsigned long align);
+
+int staros_display_init(void);
+int staros_input_init(void);

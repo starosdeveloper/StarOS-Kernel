@@ -61,6 +61,10 @@ pub mod uart;
 pub mod devicetree;
 pub mod gpio;
 
+// Samsung Exynos/One UI device support
+#[cfg(not(test))]
+pub mod samsung;
+
 // Re-exports
 pub use traits::{BasicDevice, Streamable, BlockStorage, InterruptDevice, DeviceId, DeviceCapabilities, PowerState};
 pub use registry::{DeviceRegistry, DeviceHandle, RegistryError, global_registry};

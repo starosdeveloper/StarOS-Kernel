@@ -1,0 +1,359 @@
+# the Kotlin/Native compiler to generate bindings.
+#
+# Usage:
+#   kotlinc-native -target linux_arm64 -library staros_kernel.klib \
+#                  -native-library libstaros_kernel.a \
+#                  -Xinclude=staros_kernel.def
+
+# Package name for generated Kotlin bindings
+package = com.staros.kernel.ffi
+
+# Header files to parse (we'll generate a combined header)
+headers = staros_ffi.h
+
+# Library paths
+libraryPaths = ../kernel/target/aarch64-unknown-none/release
+
+# Static libraries to link
+staticLibraries = libstaros_kernel.a
+
+# Compiler options
+compilerOpts = -I../kernel/src/ffi
+
+# Linker options
+linkerOpts = -L../kernel/target/aarch64-unknown-none/release
+
+---
+
+// Manual C declarations for FFI types and functions
+// This section provides type definitions that cinterop will use
+
+// ============================================================================
+// Error types
+// ============================================================================
+
+typedef enum {
+    FFI_ERROR_SUCCESS = 0,
+    FFI_ERROR_INVALID_PARAMETER = 1,
+    FFI_ERROR_NOT_INITIALIZED = 2,
+    FFI_ERROR_ALREADY_INITIALIZED = 3,
+    FFI_ERROR_OUT_OF_MEMORY = 4,
+    FFI_ERROR_RESOURCE_EXHAUSTED = 5,
+    FFI_ERROR_NOT_FOUND = 6,
+    FFI_ERROR_PERMISSION_DENIED = 7,
+    FFI_ERROR_BUSY = 8,
+    FFI_ERROR_TIMEOUT = 9,
+    FFI_ERROR_IO_ERROR = 10,
+    FFI_ERROR_UNKNOWN = 255
+} FFIError;
+
+// ============================================================================
+// Display types
+// ============================================================================
+
+typedef enum {
+    FFI_BLEND_MODE_OPAQUE = 0,
+    FFI_BLEND_MODE_ALPHA = 1
+} FFIBlendMode;
+
+typedef struct {
+    uint32_t x;
+    uint32_t y;
+    uint32_t width;
+    uint32_t height;
+    uint32_t color;
+    const uint32_t* pixels;
+    uint32_t stride;
+    FFIBlendMode blend_mode;
+    uint8_t z_order;
+    bool visible;
+} FFISurface;
+
+typedef struct {
+    uint32_t x;
+    uint32_t y;
+    uint32_t max_width;
+    uint32_t max_height;
+    uint32_t fg_color;
+    uint32_t bg_color;
+    uint32_t font_scale;
+    uint8_t z_order;
+    bool visible;
+    const uint8_t* text;
+    size_t text_len;
+} FFITextSurface;
+
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;
+    uint64_t fb_phys;
+    bool dma_busy;
+} FFIDisplayInfo;
+
+typedef struct {
+    uint32_t value;
+} FFIFlipCookie;
+
+// ============================================================================
+// Input types
+// ============================================================================
+
+typedef enum {
+    FFI_INPUT_EVENT_MOUSE_MOVE = 0,
+    FFI_INPUT_EVENT_MOUSE_BUTTON = 1,
+    FFI_INPUT_EVENT_MOUSE_WHEEL = 2,
+    FFI_INPUT_EVENT_KEY_DOWN = 3,
+    FFI_INPUT_EVENT_KEY_UP = 4,
+    FFI_INPUT_EVENT_TOUCH = 5
+} FFIInputEventType;
+
+typedef struct {
+    int16_t dx;
+    int16_t dy;
+} FFIMouseMoveData;
+
+typedef struct {
+    uint8_t buttons;
+    bool pressed;
+    uint32_t x;
+    uint32_t y;
+} FFIMouseButtonData;
+
+typedef struct {
+    int8_t delta;
+    uint32_t x;
+    uint32_t y;
+} FFIMouseWheelData;
+
+typedef struct {
+    uint16_t scancode;
+} FFIKeyData;
+
+typedef struct {
+    uint8_t id;
+    uint32_t x;
+    uint32_t y;
+    bool pressed;
+} FFITouchData;
+
+typedef union {
+    FFIMouseMoveData mouse_move;
+    FFIMouseButtonData mouse_button;
+    FFIMouseWheelData mouse_wheel;
+    FFIKeyData key;
+    FFITouchData touch;
+} FFIInputEventData;
+
+typedef struct {
+    FFIInputEventType event_type;
+    FFIInputEventData data;
+} FFIInputEvent;
+
+typedef struct {
+    uint32_t x;
+    uint32_t y;
+    bool visible;
+    uint32_t color;
+    uint32_t size;
+} FFICursor;
+
+// ============================================================================
+// IPC types
+// ============================================================================
+
+typedef struct {
+    uint64_t sender;
+    uint64_t msg_type;
+    uint64_t data[6];
+} FFIMessage;
+
+typedef enum {
+    FFI_SIGNAL_KILL = 1,
+    FFI_SIGNAL_INTERRUPT = 2,
+    FFI_SIGNAL_TERMINATE = 3,
+    FFI_SIGNAL_STOP = 4,
+    FFI_SIGNAL_CONTINUE = 5,
+    FFI_SIGNAL_CHILD = 6,
+    FFI_SIGNAL_USER1 = 7,
+    FFI_SIGNAL_USER2 = 8
+} FFISignal;
+
+typedef struct {
+    uint64_t base;
+    size_t size;
+    size_t ref_count;
+} FFISharedMemory;
+
+// ============================================================================
+// Memory types
+// ============================================================================
+
+typedef struct {
+    size_t total_bytes;
+    size_t used_bytes;
+    size_t free_bytes;
+    size_t largest_free_block;
+} FFIMemoryInfo;
+
+typedef struct {
+    uint64_t phys_addr;
+    uint64_t virt_addr;
+    size_t size;
+    uint32_t flags;
+} FFIBuffer;
+
+// ============================================================================
+// System types
+// ============================================================================
+
+typedef enum {
+    FFI_TASK_STATE_READY = 0,
+    FFI_TASK_STATE_RUNNING = 1,
+    FFI_TASK_STATE_BLOCKED = 2,
+    FFI_TASK_STATE_SLEEPING = 3,
+    FFI_TASK_STATE_ZOMBIE = 4
+} FFITaskState;
+
+typedef struct {
+    uint64_t task_id;
+    uint8_t priority;
+    FFITaskState state;
+    uint64_t cpu_time_us;
+} FFITaskInfo;
+
+typedef enum {
+    FFI_POWER_STATE_ACTIVE = 0,
+    FFI_POWER_STATE_IDLE = 1,
+    FFI_POWER_STATE_SUSPEND = 2,
+    FFI_POWER_STATE_HIBERNATE = 3,
+    FFI_POWER_STATE_SHUTDOWN = 4
+} FFIPowerState;
+
+typedef enum {
+    FFI_SYSTEM_EVENT_POWER_BUTTON = 0,
+    FFI_SYSTEM_EVENT_VOLUME_UP = 1,
+    FFI_SYSTEM_EVENT_VOLUME_DOWN = 2,
+    FFI_SYSTEM_EVENT_LOW_BATTERY = 3,
+    FFI_SYSTEM_EVENT_THERMAL = 4,
+    FFI_SYSTEM_EVENT_WATCHDOG = 5
+} FFISystemEvent;
+
+// ============================================================================
+// Result types
+// ============================================================================
+
+#define FFI_RESULT(T) \
+    typedef struct { \
+        FFIError error; \
+        T value; \
+    } FFIResult_##T
+
+FFI_RESULT(size_t);
+FFI_RESULT(FFIDisplayInfo);
+FFI_RESULT(FFIFlipCookie);
+FFI_RESULT(FFICursor);
+FFI_RESULT(FFIMessage);
+FFI_RESULT(FFISharedMemory);
+FFI_RESULT(FFIMemoryInfo);
+FFI_RESULT(FFIBuffer);
+FFI_RESULT(FFITaskInfo);
+FFI_RESULT(uint64_t);
+
+// ============================================================================
+// Function declarations
+// ============================================================================
+
+// FFI initialization
+extern uint32_t staros_ffi_get_version(void);
+extern const uint8_t* staros_ffi_get_version_string(void);
+extern size_t staros_ffi_get_version_string_len(void);
+extern FFIError staros_ffi_init(void);
+extern FFIError staros_ffi_shutdown(void);
+
+// Display functions
+extern FFIError staros_display_init(uint64_t fb_addr, uint32_t width, uint32_t height, uint32_t stride);
+extern FFIResult_FFIDisplayInfo staros_display_get_info(void);
+extern FFIResult_size_t staros_display_add_surface(FFISurface surface);
+extern FFIError staros_display_remove_surface(size_t handle);
+extern FFIError staros_display_update_surface(size_t handle, FFISurface surface);
+extern FFIError staros_display_move_surface(size_t handle, uint32_t x, uint32_t y);
+extern FFIError staros_display_resize_surface(size_t handle, uint32_t width, uint32_t height);
+extern FFIError staros_display_set_surface_visible(size_t handle, bool visible);
+extern FFIError staros_display_set_surface_z_order(size_t handle, uint8_t z_order);
+extern FFIError staros_display_set_background(uint32_t color);
+extern FFIResult_size_t staros_display_add_text_surface(FFITextSurface ts);
+extern FFIError staros_display_remove_text_surface(size_t handle);
+extern FFIError staros_display_update_text_surface(size_t handle, const uint8_t* text, size_t text_len);
+extern FFIError staros_display_present(void);
+extern FFIError staros_display_clear(uint32_t color);
+extern bool staros_display_dma_busy(void);
+extern uint32_t staros_display_rgb(uint8_t r, uint8_t g, uint8_t b);
+extern uint32_t staros_display_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+
+// Input functions
+extern FFIError staros_input_init(void);
+extern size_t staros_input_poll_events(FFIInputEvent* events, size_t max_events);
+extern bool staros_input_has_events(void);
+extern size_t staros_input_event_count(void);
+extern bool staros_input_push_event(FFIInputEvent event);
+extern FFIResult_FFICursor staros_input_get_cursor_pos(void);
+extern FFIError staros_input_set_cursor_pos(uint32_t x, uint32_t y);
+extern FFIError staros_input_set_cursor_visible(bool visible);
+extern FFIError staros_input_move_cursor(int16_t dx, int16_t dy);
+extern size_t staros_input_get_touches(FFITouchData* touches, size_t max_touches);
+extern size_t staros_input_touch_count(void);
+extern bool staros_input_is_key_pressed(uint16_t scancode);
+extern size_t staros_input_get_pressed_keys(uint16_t* scancodes, size_t max_keys);
+extern uint8_t staros_input_get_mouse_buttons(void);
+extern bool staros_input_is_mouse_button_pressed(uint8_t button);
+extern bool staros_input_has_mouse(void);
+extern bool staros_input_has_keyboard(void);
+extern bool staros_input_has_touchscreen(void);
+extern size_t staros_input_max_touch_points(void);
+
+// Memory functions
+extern uint8_t* staros_memory_alloc(size_t size, size_t align);
+extern uint8_t* staros_memory_alloc_zeroed(size_t size, size_t align);
+extern void staros_memory_free(uint8_t* ptr, size_t size, size_t align);
+extern uint8_t* staros_memory_realloc(uint8_t* ptr, size_t old_size, size_t new_size, size_t align);
+extern FFIResult_FFIBuffer staros_memory_alloc_dma_buffer(size_t size);
+extern FFIError staros_memory_free_dma_buffer(FFIBuffer buffer);
+extern FFIError staros_memory_cache_flush(uint64_t addr, size_t size);
+extern FFIError staros_memory_cache_invalidate(uint64_t addr, size_t size);
+extern FFIResult_FFIMemoryInfo staros_memory_get_stats(void);
+extern size_t staros_memory_get_total_physical(void);
+extern size_t staros_memory_get_free_physical(void);
+extern size_t staros_memory_get_used_physical(void);
+
+// System functions
+extern uint64_t staros_system_get_current_task_id(void);
+extern FFIResult_FFITaskInfo staros_system_get_task_info(uint64_t task_id);
+extern size_t staros_system_get_all_tasks(uint64_t* task_ids, size_t max_tasks);
+extern size_t staros_system_get_task_count(void);
+extern FFIError staros_system_set_task_priority(uint64_t task_id, uint8_t priority);
+extern void staros_system_yield(void);
+extern void staros_system_sleep_us(uint64_t microseconds);
+extern void staros_system_sleep_ms(uint64_t milliseconds);
+extern FFIPowerState staros_system_get_power_state(void);
+extern FFIError staros_system_set_power_state(FFIPowerState state);
+extern void staros_system_shutdown(void);
+extern void staros_system_reboot(void);
+extern FFIError staros_system_watchdog_enable(uint32_t timeout_ms);
+extern FFIError staros_system_watchdog_disable(void);
+extern FFIError staros_system_watchdog_pet(void);
+extern bool staros_system_watchdog_is_enabled(void);
+extern uint32_t staros_system_watchdog_get_timeout(void);
+extern uint64_t staros_system_get_uptime_us(void);
+extern uint64_t staros_system_get_uptime_ms(void);
+extern uint64_t staros_system_get_uptime_sec(void);
+extern uint8_t staros_system_get_cpu_usage(void);
+extern uint64_t staros_system_get_context_switches(void);
+extern uint64_t staros_system_get_interrupt_count(void);
+extern const uint8_t* staros_system_get_kernel_version(void);
+extern size_t staros_system_get_kernel_version_len(void);
+extern size_t staros_system_get_cpu_count(void);
+extern size_t staros_system_get_current_cpu(void);
+extern void staros_system_debug_print(const uint8_t* msg, size_t msg_len);
+extern uint64_t staros_system_perf_start(void);
+extern uint64_t staros_system_perf_stop(uint64_t start);
