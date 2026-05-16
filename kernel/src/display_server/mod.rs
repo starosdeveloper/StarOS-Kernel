@@ -61,7 +61,9 @@ pub const MAX_TEXT_SURFACES: usize = 16;
 
 /// Static storage for the software back-buffer.
 /// `MAX_FB_PIXELS` covers up to 1920×1080 (2 073 600 pixels = 8 MB).
-static mut BACK_BUFFER_STORAGE: [u32; MAX_FB_PIXELS] = [0u32; MAX_FB_PIXELS];
+struct BackBufferCell(core::cell::UnsafeCell<[u32; MAX_FB_PIXELS]>);
+unsafe impl Sync for BackBufferCell {}
+static BACK_BUFFER_STORAGE: BackBufferCell = BackBufferCell(core::cell::UnsafeCell::new([0u32; MAX_FB_PIXELS]));
 
 // ---------------------------------------------------------------------------
 // Global display server instance
@@ -89,13 +91,14 @@ pub unsafe fn init(
     }
 
     let fb = Framebuffer::new(fb_addr, width, height, stride, PixelFormat::Argb8888);
-    let db = DoubleBuffer::new(&fb, &mut BACK_BUFFER_STORAGE)
+    // SAFETY: init() is called once at boot, exclusive access guaranteed by Mutex above
+    let bb_ptr = unsafe { &mut *BACK_BUFFER_STORAGE.0.get() };
+    let db = DoubleBuffer::new(&fb, bb_ptr)
         .map_err(|_| DisplayError::BufferTooSmall)?;
     let comp = Compositor::new(width, height);
 
     // Physical address of the back-buffer.
-    // On bare-metal with identity-mapped kernel BSS: virt == phys.
-    let bb_phys = BACK_BUFFER_STORAGE.as_ptr() as u64;
+    let bb_phys = BACK_BUFFER_STORAGE.0.get() as u64;
     let transfer_len = (stride * height) as usize * core::mem::size_of::<u32>();
     let dma = DmaFlip::new(fb_addr as u64, bb_phys, transfer_len);
 

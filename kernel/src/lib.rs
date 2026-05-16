@@ -79,9 +79,10 @@ mod kernel_alloc {
     const HEAP_SIZE: usize = 1024 * 1024;
 
     #[repr(C, align(4096))]
-    struct HeapStorage([u8; HEAP_SIZE]);
+    struct HeapStorage(core::cell::UnsafeCell<[u8; HEAP_SIZE]>);
+    unsafe impl Sync for HeapStorage {}
 
-    static mut HEAP: HeapStorage = HeapStorage([0; HEAP_SIZE]);
+    static HEAP: HeapStorage = HeapStorage(core::cell::UnsafeCell::new([0; HEAP_SIZE]));
     static HEAP_POS: AtomicUsize = AtomicUsize::new(0);
     static HEAP_READY: AtomicBool = AtomicBool::new(false);
 
@@ -113,7 +114,7 @@ mod kernel_alloc {
                 if HEAP_POS.compare_exchange_weak(
                     pos, new_pos, Ordering::AcqRel, Ordering::Relaxed
                 ).is_ok() {
-                    return HEAP.0.as_mut_ptr().add(aligned);
+                    return (HEAP.0.get() as *mut u8).add(aligned);
                 }
             }
         }

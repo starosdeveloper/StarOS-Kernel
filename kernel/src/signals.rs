@@ -59,39 +59,35 @@ impl SignalState {
             saved_ctx: None,
         }
     }
+
+    /// Const value for static array initialization
+    const NEW: Self = Self::new();
 }
 
 /// Global signal state table indexed by task_id.
-static mut SIGNAL_TABLE: Option<&'static mut [SignalState]> = None;
+/// Uses UnsafeCell for interior mutability without `static mut`.
+struct SignalStorage {
+    table: core::cell::UnsafeCell<[SignalState; MAX_TASKS]>,
+}
+unsafe impl Sync for SignalStorage {}
 
-/// Fixed backing storage for signal state (no_std compatible).
-static mut SIGNAL_STORAGE: [core::mem::MaybeUninit<SignalState>; MAX_TASKS] =
-    // SAFETY: MaybeUninit array doesn't require initialization.
-    unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+static SIGNAL_STORAGE: SignalStorage = SignalStorage {
+    table: core::cell::UnsafeCell::new([SignalState::NEW; MAX_TASKS]),
+};
 
 static INIT_DONE: AtomicU32 = AtomicU32::new(0);
 
 /// Initialize the signal subsystem. Must be called once at boot.
 pub fn init() {
-    if INIT_DONE.swap(1, Ordering::AcqRel) != 0 {
-        return;
-    }
-    // SAFETY: Single-threaded init at boot, guarded by atomic flag.
-    unsafe {
-        for slot in SIGNAL_STORAGE.iter_mut() {
-            slot.write(SignalState::new());
-        }
-        let ptr = SIGNAL_STORAGE.as_mut_ptr() as *mut SignalState;
-        SIGNAL_TABLE = Some(core::slice::from_raw_parts_mut(ptr, MAX_TASKS));
-    }
+    INIT_DONE.store(1, Ordering::Release);
 }
 
 fn get_state(task_id: usize) -> Option<&'static mut SignalState> {
     if task_id >= MAX_TASKS {
         return None;
     }
-    // SAFETY: Accessed after init(), task_id bounds-checked.
-    unsafe { SIGNAL_TABLE.as_mut().and_then(|t| t.get_mut(task_id)) }
+    // SAFETY: task_id is bounds-checked. Each task accesses only its own slot.
+    unsafe { Some(&mut (*SIGNAL_STORAGE.table.get())[task_id]) }
 }
 
 /// Send a signal to a task. Sets the pending bit.

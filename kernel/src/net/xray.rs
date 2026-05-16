@@ -10,7 +10,6 @@
 
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
-use spin::Mutex;
 use crate::error::KernelError;
 
 // ---------------------------------------------------------------------------

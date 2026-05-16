@@ -14,7 +14,6 @@
 use crate::net::vless::{self, VlessConfig, Uuid, TransportType, FlowType};
 use crate::error::KernelError;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use spin::Mutex;
 
 // ---------------------------------------------------------------------------
 // Bypass State
@@ -72,11 +71,23 @@ static BYPASS_DOMAINS: &[&str] = &[
     "linkedin.com",
 
     // Messengers
+    "telegram.org",
+    "t.me",
+    "telegram.me",
+    "core.telegram.org",
+    "web.telegram.org",
+    "desktop.telegram.org",
+    "updates.telegram.org",
+    "telegram-cdn.org",
+    "telesco.pe",
+    "tdesktop.com",
     "discord.com",
     "discord.gg",
     "discordapp.com",
+    "discord.media",
     "signal.org",
     "whispersystems.org",
+    "viber.com",
 
     // Media
     "youtube.com",
@@ -110,14 +121,26 @@ static BYPASS_DOMAINS: &[&str] = &[
 ];
 
 /// IP ranges that should be routed through tunnel (CIDR)
-/// These cover known blocked IP ranges
 static BYPASS_IP_RANGES: &[(&str, u8)] = &[
+    // Telegram
+    ("149.154.160.0", 20),
+    ("149.154.164.0", 22),
+    ("149.154.168.0", 22),
+    ("149.154.172.0", 22),
+    ("91.108.4.0", 22),
+    ("91.108.8.0", 22),
+    ("91.108.12.0", 22),
+    ("91.108.16.0", 22),
+    ("91.108.20.0", 22),
+    ("91.108.56.0", 22),
+    ("95.161.64.0", 20),
     // Discord
     ("162.159.128.0", 17),
-    // Cloudflare (partial, for blocked sites)
-    ("104.16.0.0", 12),
     // Twitter/X
     ("104.244.42.0", 24),
+    // Meta (Instagram/Facebook)
+    ("157.240.0.0", 16),
+    ("31.13.24.0", 21),
 ];
 
 // ---------------------------------------------------------------------------
@@ -313,6 +336,9 @@ mod tests {
         assert!(should_bypass("www.instagram.com"));
         assert!(should_bypass("discord.com"));
         assert!(should_bypass("chatgpt.com"));
+        assert!(should_bypass("t.me"));
+        assert!(should_bypass("web.telegram.org"));
+        assert!(should_bypass("telegram.org"));
         assert!(!should_bypass("yandex.ru"));
         assert!(!should_bypass("vk.com"));
     }
@@ -322,6 +348,10 @@ mod tests {
         BYPASS_ACTIVE.store(true, Ordering::Release);
         BYPASS_MODE.store(BypassMode::Auto as u8, Ordering::Release);
 
+        // Telegram IP range 149.154.160.0/20
+        assert!(should_bypass_ip(&[149, 154, 167, 1]));
+        // Telegram IP range 91.108.4.0/22
+        assert!(should_bypass_ip(&[91, 108, 5, 100]));
         // Discord IP range
         assert!(should_bypass_ip(&[162, 159, 130, 1]));
         // Random IP - not bypassed

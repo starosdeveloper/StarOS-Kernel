@@ -22,7 +22,6 @@
 //! ```
 
 use alloc::vec::Vec;
-use alloc::string::String;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 use crate::error::KernelError;

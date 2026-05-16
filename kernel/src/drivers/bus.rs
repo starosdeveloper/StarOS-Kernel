@@ -127,11 +127,14 @@ impl BusManager {
 }
 
 /// Global bus manager instance
-static mut BUS_MANAGER: BusManager = BusManager::new();
+struct BusManagerCell(core::cell::UnsafeCell<BusManager>);
+unsafe impl Sync for BusManagerCell {}
+static BUS_MANAGER: BusManagerCell = BusManagerCell(core::cell::UnsafeCell::new(BusManager::new()));
 
-/// Get global bus manager (unsafe - single-threaded init only)
+/// Get global bus manager
+/// # Safety: caller must ensure exclusive access
 pub unsafe fn global_bus_manager() -> &'static mut BusManager {
-    &mut BUS_MANAGER
+    &mut *BUS_MANAGER.0.get()
 }
 
 #[cfg(test)]
