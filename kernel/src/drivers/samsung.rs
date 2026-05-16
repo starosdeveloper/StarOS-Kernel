@@ -1,52 +1,152 @@
-//! Samsung Exynos/One UI Device Support
+//! Samsung Galaxy Device Support — Full Lineup
 //!
-//! Provides hardware abstraction for Samsung Galaxy devices:
-//! - Exynos SoC initialization (2100, 2200, 2400)
-//! - Samsung PMIC (S2MPS/S2MPB series)
-//! - Samsung UFS storage controller
-//! - Samsung display (AMOLED via DECON/DPU)
-//! - Samsung modem (Shannon)
-//! - One UI integration hooks
+//! Native support for all Samsung Galaxy categories:
+//! - **Budget** (Galaxy A series): A14, A15, A25, A34, A35, A54, A55
+//! - **Mid-range** (Galaxy M/F series): M34, M54, F54, M55
+//! - **Flagship** (Galaxy S/Z series): S21-S25, Z Flip/Fold 3-6
+//!
+//! SoC coverage:
+//! - Exynos: 850, 1280, 1380, 1480, 2100, 2200, 2400
+//! - Snapdragon (Samsung variants): 680, 695, 750G, 778G, 8 Gen 1/2/3
 
 use crate::error::KernelError;
 use crate::soc::detection::{SocInfo, SocFamily, ExynosModel};
 use spin::Mutex;
 
 // ---------------------------------------------------------------------------
-// Samsung Exynos SoC Register Maps
+// Samsung Device Categories
 // ---------------------------------------------------------------------------
 
-/// Exynos 2100 (S21 series) base addresses
-pub mod exynos2100 {
-    pub const PMU_BASE: u64 = 0x1580_0000;
-    pub const CMU_BASE: u64 = 0x1A00_0000;
-    pub const GPIO_BASE: u64 = 0x1580_0000;
-    pub const UFS_BASE: u64 = 0x1310_0000;
-    pub const DECON_BASE: u64 = 0x1930_0000;
-    pub const UART_BASE: u64 = 0x1082_0000;
-    pub const I2C_BASE: u64 = 0x1383_0000;
-    pub const USI_BASE: u64 = 0x1084_0000;
+/// Samsung device tier
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SamsungTier {
+    /// Galaxy A series (A14, A15, A25, A34, A35, A54, A55)
+    Budget,
+    /// Galaxy M/F series (M34, M54, F54, M55)
+    MidRange,
+    /// Galaxy S/Z series (S21-S25, Z Flip/Fold)
+    Flagship,
+}
+
+/// Supported Samsung models
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SamsungModel {
+    // Budget - Galaxy A
+    GalaxyA14,  // Exynos 850 / Helio G80
+    GalaxyA15,  // Helio G99 / Dimensity 6100+
+    GalaxyA25,  // Exynos 1280
+    GalaxyA34,  // Dimensity 1080
+    GalaxyA35,  // Exynos 1380
+    GalaxyA54,  // Exynos 1380
+    GalaxyA55,  // Exynos 1480
+
+    // Mid-range - Galaxy M/F
+    GalaxyM34,  // Exynos 1280
+    GalaxyM54,  // SD 778G
+    GalaxyM55,  // SD 7s Gen 2
+    GalaxyF54,  // Exynos 1380
+
+    // Flagship - Galaxy S
+    GalaxyS21,  // Exynos 2100 / SD 888
+    GalaxyS22,  // Exynos 2200 / SD 8 Gen 1
+    GalaxyS23,  // SD 8 Gen 2
+    GalaxyS24,  // Exynos 2400 / SD 8 Gen 3
+    GalaxyS25,  // SD 8 Elite
+
+    // Flagship - Galaxy Z
+    GalaxyZFlip4, // SD 8+ Gen 1
+    GalaxyZFlip5, // SD 8 Gen 2
+    GalaxyZFlip6, // SD 8 Gen 3
+    GalaxyZFold4, // SD 8+ Gen 1
+    GalaxyZFold5, // SD 8 Gen 2
+    GalaxyZFold6, // SD 8 Gen 3
+}
+
+impl SamsungModel {
+    pub fn tier(&self) -> SamsungTier {
+        match self {
+            Self::GalaxyA14 | Self::GalaxyA15 | Self::GalaxyA25 |
+            Self::GalaxyA34 | Self::GalaxyA35 | Self::GalaxyA54 |
+            Self::GalaxyA55 => SamsungTier::Budget,
+
+            Self::GalaxyM34 | Self::GalaxyM54 | Self::GalaxyM55 |
+            Self::GalaxyF54 => SamsungTier::MidRange,
+
+            _ => SamsungTier::Flagship,
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::GalaxyA14 => "Galaxy A14",
+            Self::GalaxyA15 => "Galaxy A15",
+            Self::GalaxyA25 => "Galaxy A25",
+            Self::GalaxyA34 => "Galaxy A34",
+            Self::GalaxyA35 => "Galaxy A35",
+            Self::GalaxyA54 => "Galaxy A54",
+            Self::GalaxyA55 => "Galaxy A55",
+            Self::GalaxyM34 => "Galaxy M34",
+            Self::GalaxyM54 => "Galaxy M54",
+            Self::GalaxyM55 => "Galaxy M55",
+            Self::GalaxyF54 => "Galaxy F54",
+            Self::GalaxyS21 => "Galaxy S21",
+            Self::GalaxyS22 => "Galaxy S22",
+            Self::GalaxyS23 => "Galaxy S23",
+            Self::GalaxyS24 => "Galaxy S24",
+            Self::GalaxyS25 => "Galaxy S25",
+            Self::GalaxyZFlip4 => "Galaxy Z Flip4",
+            Self::GalaxyZFlip5 => "Galaxy Z Flip5",
+            Self::GalaxyZFlip6 => "Galaxy Z Flip6",
+            Self::GalaxyZFold4 => "Galaxy Z Fold4",
+            Self::GalaxyZFold5 => "Galaxy Z Fold5",
+            Self::GalaxyZFold6 => "Galaxy Z Fold6",
+        }
+    }
+
+    /// Display resolution for this model
+    pub fn display_resolution(&self) -> (u32, u32) {
+        match self.tier() {
+            SamsungTier::Budget => (1080, 2400),    // FHD+
+            SamsungTier::MidRange => (1080, 2400),  // FHD+
+            SamsungTier::Flagship => (1440, 3200),  // QHD+ (S series)
+        }
+    }
+
+    /// Max refresh rate
+    pub fn max_refresh_hz(&self) -> u32 {
+        match self {
+            Self::GalaxyA14 => 60,
+            Self::GalaxyA15 | Self::GalaxyA25 => 90,
+            _ => 120,
+        }
+    }
+
+    /// RAM size in MB (typical)
+    pub fn ram_mb(&self) -> u32 {
+        match self.tier() {
+            SamsungTier::Budget => 4096,    // 4GB
+            SamsungTier::MidRange => 6144,  // 6GB
+            SamsungTier::Flagship => 8192,  // 8-12GB
+        }
+    }
 }
 
 /// Exynos 2200 (S22 series)
 pub mod exynos2200 {
-    pub const PMU_BASE: u64 = 0x1580_0000;
-    pub const CMU_BASE: u64 = 0x1A00_0000;
-    pub const GPU_BASE: u64 = 0x1C40_0000; // Xclipse 920 (RDNA2)
-    pub const UFS_BASE: u64 = 0x1310_0000;
     pub const DECON_BASE: u64 = 0x1930_0000;
-    pub const UART_BASE: u64 = 0x1082_0000;
+    pub const UFS_BASE: u64 = 0x1310_0000;
 }
 
 /// Exynos 2400 (S24 series)
 pub mod exynos2400 {
-    pub const PMU_BASE: u64 = 0x1580_0000;
-    pub const CMU_BASE: u64 = 0x1A00_0000;
-    pub const GPU_BASE: u64 = 0x1C40_0000; // Xclipse 940 (RDNA3)
-    pub const UFS_BASE: u64 = 0x1310_0000;
     pub const DECON_BASE: u64 = 0x1930_0000;
-    pub const UART_BASE: u64 = 0x1082_0000;
-    pub const NPU_BASE: u64 = 0x1E00_0000;
+    pub const UFS_BASE: u64 = 0x1310_0000;
+}
+
+/// Exynos 2100 (S21 series)
+pub mod exynos2100 {
+    pub const DECON_BASE: u64 = 0x1930_0000;
+    pub const UFS_BASE: u64 = 0x1310_0000;
 }
 
 // ---------------------------------------------------------------------------

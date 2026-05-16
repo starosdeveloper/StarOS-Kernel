@@ -32,6 +32,7 @@ pub mod mac80211;
 pub mod bluetooth;
 pub mod vless;
 pub mod xray;
+pub mod bypass;
 
 #[cfg(not(test))]
 pub use skbuff::{SkBuff, SkBuffError, ChecksumType, PacketType};

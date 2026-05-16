@@ -64,6 +64,7 @@ pub mod gpio;
 // Samsung Exynos/One UI device support
 #[cfg(not(test))]
 pub mod samsung;
+pub mod xiaomi;
 
 // Re-exports
 pub use traits::{BasicDevice, Streamable, BlockStorage, InterruptDevice, DeviceId, DeviceCapabilities, PowerState};
